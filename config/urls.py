@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path
 from graphene_django.views import GraphQLView
 from shop.graphql.schema import schema
+from shop.graphql.views import CustomGraphQLView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -25,6 +26,6 @@ urlpatterns = [
     
     path(
         "graphql/",
-        GraphQLView.as_view(graphiql=True, schema=schema),
+        CustomGraphQLView.as_view(graphiql=True, schema=schema),
     ),
 ]
