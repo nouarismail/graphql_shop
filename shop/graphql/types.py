@@ -21,11 +21,21 @@ class CategoryType(DjangoObjectType):
 class ProductType(DjangoObjectType):
     price_with_tax = graphene.Decimal()
     price = graphene.Decimal()
+    category = graphene.Field(CategoryType)
+
+    def resolve_category(self, info):
+        return info.context.category_loader.load(
+            self.category_id
+        )
     class Meta:
         model = Product
         fields = ("id", "name", "description", "price", "category")
+        
+        interfaces = (graphene.relay.Node,)
+        
     def resolve_price_with_tax(self, info):
         return self.price * Decimal("1.2") 
+    
     
 class ProductConnection(graphene.ObjectType):
 
