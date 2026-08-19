@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     
 ]
 
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -105,6 +106,10 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+JWT_SECRET_KEY = SECRET_KEY
+JWT_ALGORITHM = "HS256"
+JWT_ACCESS_TOKEN_LIFETIME = 60 * 60
 
 
 # Internationalization

@@ -1,15 +1,21 @@
 import graphene
+from graphql_relay import from_global_id
 from  .types import ProductConnection, UserType, ProductType, CategoryType, OrderType
 from ..models import Category, Product, Order
 from django.contrib.auth.models import User
 from graphene_django.filter import DjangoFilterConnectionField
 from .filters import ProductFilter
+from .auth import get_current_user
 
 class Query(graphene.ObjectType):
     user = graphene.Field(UserType, id=graphene.Int())
-    product = graphene.Field(ProductType, id=graphene.Int())
+    product = graphene.Field(
+        ProductType,
+        id=graphene.ID(required=True)
+    )
     users = graphene.List(UserType)
     categories = graphene.List(CategoryType)
+    node = graphene.relay.Node.Field()
     products = DjangoFilterConnectionField(
         ProductType,
         filterset_class=ProductFilter,
@@ -19,10 +25,8 @@ class Query(graphene.ObjectType):
 
     def resolve_me(root, info):
 
-        user = info.context.user
+        user = get_current_user(info)
 
-        if user.is_anonymous:
-            return None
 
         return user
 
@@ -64,8 +68,11 @@ class Query(graphene.ObjectType):
     def resolve_users(root, info):
         return User.objects.all()
     
-    def resolve_product(root, info, id):
-        try:
-            return Product.objects.get(pk=id)
-        except Product.DoesNotExist:
-            return None
+    def resolve_product(self, info, id):
+
+        type_name, database_id = from_global_id(id)
+
+        if type_name != "ProductType":
+            raise Exception("Invalid Product ID")
+
+        return Product.objects.get(id=database_id)
