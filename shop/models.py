@@ -50,4 +50,16 @@ class RevokedRefreshToken(models.Model):
 
     def __str__(self):
         return f"Revoked refresh token for {self.user.username}"
+
+
+class UserTokenState(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="token_state",
+    )
+    version = models.PositiveBigIntegerField(default=0)
+
+    def __str__(self):
+        return f"Token state for {self.user.username}"
     

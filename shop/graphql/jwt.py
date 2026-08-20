@@ -4,18 +4,21 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.db.models import F
 
-from ..models import RevokedRefreshToken
+from ..models import RevokedRefreshToken, UserTokenState
 
 
 def _generate_token(user, token_type, lifetime):
 
     now = datetime.now(timezone.utc)
+    token_state, _ = UserTokenState.objects.get_or_create(user=user)
 
     payload = {
         "user_id": user.id,
         "username": user.username,
         "token_type": token_type,
+        "token_version": token_state.version,
         "iat": now,
         "exp": now + timedelta(seconds=lifetime),
     }
@@ -116,9 +119,33 @@ def get_user_from_refresh_token(token):
         return None
 
     try:
-        return User.objects.get(id=payload["user_id"], is_active=True)
+        user = User.objects.get(id=payload["user_id"], is_active=True)
     except (User.DoesNotExist, KeyError):
         return None
+
+    if not _has_current_token_version(user, payload):
+        return None
+
+    return user
+
+
+def invalidate_user_tokens(user):
+
+    token_state, _ = UserTokenState.objects.get_or_create(user=user)
+    UserTokenState.objects.filter(pk=token_state.pk).update(
+        version=F("version") + 1
+    )
+
+
+def _has_current_token_version(user, payload):
+
+    try:
+        token_version = payload["token_version"]
+    except KeyError:
+        return False
+
+    token_state, _ = UserTokenState.objects.get_or_create(user=user)
+    return token_version == token_state.version
 
 
 def get_user_from_token(token):
@@ -130,7 +157,12 @@ def get_user_from_token(token):
 
     try:
 
-        return User.objects.get(id=payload["user_id"], is_active=True)
+        user = User.objects.get(id=payload["user_id"], is_active=True)
 
     except (User.DoesNotExist, KeyError):
         return None
+
+    if not _has_current_token_version(user, payload):
+        return None
+
+    return user

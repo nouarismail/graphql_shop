@@ -7,6 +7,7 @@ from shop.graphql.jwt import (
     generate_access_token,
     generate_refresh_token,
     get_user_from_refresh_token,
+    invalidate_user_tokens,
     revoke_refresh_token,
 )
 from shop.graphql.types import CategoryType, OrderType, ProductType, UserType
@@ -734,8 +735,12 @@ class Logout(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, refresh_token):
 
-        if not revoke_refresh_token(refresh_token):
+        user = get_user_from_refresh_token(refresh_token)
+
+        if user is None or not revoke_refresh_token(refresh_token):
             raise Exception("Invalid or expired refresh token")
+
+        invalidate_user_tokens(user)
 
         return Logout(success=True)
     
