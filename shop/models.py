@@ -36,4 +36,18 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity} x {self.product.name} in Order {self.order.id}"
+
+
+class RevokedRefreshToken(models.Model):
+    jti = models.CharField(max_length=36, unique=True)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="revoked_refresh_tokens",
+    )
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Revoked refresh token for {self.user.username}"
     

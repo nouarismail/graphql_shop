@@ -1,4 +1,5 @@
 from .auth import get_current_user
+from ..models import Order
 
 
 def require_authentication(info):
@@ -112,38 +113,58 @@ def can_view_order(info, order):
     if user.is_superuser:
         return user
 
-    # Staff with view_order permission
-    if user.has_perm("shop.view_order"):
+    # Staff
+    if (
+        user.groups
+        .filter(name="Staff")
+        .exists()
+        and user.has_perm("shop.view_order")
+    ):
+        return user
 
-        # Staff can view all orders
-        if user.groups.filter(
-            name="Staff"
-        ).exists():
-            return user
-
-    # Customer can only view their own order
-    if order.user_id == user.id:
+    # Customer : own order only
+    if (
+        user.has_perm("shop.view_order")
+        and order.user_id == user.id
+    ):
         return user
 
     raise Exception(
         "You cannot access this order"
     )
 
+
+def get_visible_orders(info):
+
+    user = require_authentication(info)
+
+    if user.is_superuser:
+        return Order.objects.all()
+
+    if (
+        user.groups.filter(name="Staff").exists()
+        and user.has_perm("shop.view_order")
+    ):
+        return Order.objects.all()
+
+    if user.has_perm("shop.view_order"):
+        return Order.objects.filter(user=user)
+
+    raise Exception("Permission denied")
+
 def can_cancel_order(info, order):
 
     user = require_authentication(info)
 
-    # Admin
     if user.is_superuser:
         return user
 
-    # Staff
-    if user.groups.filter(
-        name="Staff"
-    ).exists():
+    if (
+        user.groups.filter(name="Staff").exists()
+        and user.has_perm("shop.change_order")
+    ):
         return user
 
-    # Customer ownership
     if order.user_id != user.id:
         raise Exception(
             "You can only cancel your own orders"
@@ -154,12 +175,12 @@ def can_cancel_order(info, order):
         "CONFIRMED",
     ]:
         raise Exception(
-            "This order cannot be cancelled"
+            "This order can no longer be cancelled"
         )
 
     return user
 
-def can_update_order(info,order):
+def can_modify_order(info, order):
 
     user = require_authentication(info)
 
@@ -168,17 +189,27 @@ def can_update_order(info,order):
         return user
 
     # Staff
-    if user.groups.filter(
-        name="Staff"
-    ).exists():
+    if (
+        user.groups.filter(name="Staff").exists()
+        and user.has_perm("shop.change_order")
+    ):
         return user
 
-    # Customer ownership
+    # Customer can modify only own pending order
     if order.user_id != user.id:
         raise Exception(
-            "You can only update your own orders"
+            "You can only modify your own orders"
         )
 
-    
+    if order.status != "PENDING":
+        raise Exception(
+            "Order items can only be modified while order is PENDING"
+        )
 
     return user
+
+def can_update_order(info):
+    return require_permission(
+        info,
+        "shop.change_order"
+    )

@@ -1,0 +1,8 @@
+Django==6.1
+django-filter==26.1
+graphene==3.4.3
+graphene-django==3.2.3
+graphql-relay==3.2.0
+promise==2.3
+psycopg[binary]==3.3.4
+PyJWT==2.13.0

@@ -49,9 +49,12 @@ class OrderItemType(DjangoObjectType):
             "quantity",
             "product",
         )
+        interfaces = (graphene.relay.Node,)
 
 
 class OrderType(DjangoObjectType):
+    items = graphene.List(OrderItemType, required=True)
+
     class Meta:
         model = Order
         fields = (
@@ -59,7 +62,12 @@ class OrderType(DjangoObjectType):
             "user",
             "items",
             "created_at",
+            "status",
         )
+        interfaces = (graphene.relay.Node,)
+
+    def resolve_items(self, info):
+        return self.items.all()
 
 
 class UserType(DjangoObjectType):
