@@ -520,19 +520,27 @@ This mutation requires `shop.change_order`. Valid values are `PENDING`,
 
 ```graphql
 mutation UpdateOrderStatus($id: ID!, $status: OrderStatusEnum!) {
-  updateOrderStatus(id: $id, status: $status) {
+  updateOrderStatus(id: $id, status: "CONFIRMED") {
     order { id status }
   }
 }
 ```
 
-Variables:
 
-```json
-{
-  "id": "ORDER_GLOBAL_ID",
-  "status": "CONFIRMED"
-}
-```
+## Postman Collection
 
+A Postman collection is included in the `postman/` directory.
+
+Import:
+
+- `ecommerce-api.postman_collection.json`
+- `ecommerce-local.postman_environment.example.json`
+
+Then configure the environment variables such as:
+
+- `baseUrl`
+- `staffAccessToken`
+- `staffRefreshToken`
+- `customerAccessToken`
+- `customerRefreshToken`
 

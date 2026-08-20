@@ -1,0 +1,1252 @@
+{
+	"info": {
+		"_postman_id": "ac2eefa5-5f63-4295-a300-82d40490563d",
+		"name": "GraphQL",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "3377700",
+		"_collection_link": "https://gold-water-697406.postman.co/workspace/own~9706529e-1561-4e39-99bb-f77d680ea5ef/collection/3377700-ac2eefa5-5f63-4295-a300-82d40490563d?action=share&source=collection_link&creator=3377700"
+	},
+	"item": [
+		{
+			"name": "staff",
+			"item": [
+				{
+					"name": "Login Staff",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const json = pm.response.json();",
+									"",
+									"pm.environment.set(",
+									"    \"staff_access_token\",",
+									"    json.data.login.accessToken",
+									");",
+									"",
+									"pm.environment.set(",
+									"    \"staff_refresh_token\",",
+									"    json.data.login.refreshToken",
+									");"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  login(\n    username: \"staff\"\n    password: \"password\"\n  ) {\n    accessToken\n    refreshToken\n    user {\n      id\n      username\n      email\n    }\n  }\n}",
+								"variables": ""
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Staff Create Product",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{staff_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation CreateProduct($input: ProductInput!) {\n  createProduct( input: $input) {\n    product {\n      id\n      name\n      description\n      price\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {},
+						"exec": [
+							"const accessToken = pm.environment.get(\"staff_access_token\");",
+							"const refreshToken = pm.environment.get(\"staff_refresh_token\");",
+							"",
+							"function isTokenExpired(token) {",
+							"    if (!token) return true;",
+							"",
+							"    try {",
+							"        const payload = JSON.parse(",
+							"            atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))",
+							"        );",
+							"",
+							"        const now = Math.floor(Date.now() / 1000);",
+							"",
+							"        return payload.exp <= now + 10;",
+							"    } catch (e) {",
+							"        return true;",
+							"    }",
+							"}",
+							"",
+							"if (isTokenExpired(accessToken)) {",
+							"",
+							"    const query = `",
+							"        mutation RefreshToken($refreshToken: String!) {",
+							"            refreshToken(refreshToken: $refreshToken) {",
+							"                token",
+							"                refreshToken",
+							"            }",
+							"        }",
+							"    `;",
+							"",
+							"    pm.sendRequest({",
+							"        url: pm.environment.get(\"graphql_url\"),",
+							"        method: \"POST\",",
+							"        header: {",
+							"            \"Content-Type\": \"application/json\"",
+							"        },",
+							"        body: {",
+							"            mode: \"raw\",",
+							"            raw: JSON.stringify({",
+							"                query: query,",
+							"                variables: {",
+							"                    refreshToken: refreshToken",
+							"                }",
+							"            })",
+							"        }",
+							"    }, function (err, response) {",
+							"",
+							"        if (err) {",
+							"            console.error(\"Refresh failed:\", err);",
+							"            return;",
+							"        }",
+							"",
+							"        const data = response.json();",
+							"",
+							"        if (data.data && data.data.refreshToken) {",
+							"            pm.environment.set(",
+							"                \"staff_access_token\",",
+							"                data.data.refreshToken.token",
+							"            );",
+							"",
+							"            if (data.data.refreshToken.refreshToken) {",
+							"                pm.environment.set(",
+							"                    \"staff_refresh_token\",",
+							"                    data.data.refreshToken.refreshToken",
+							"                );",
+							"            }",
+							"",
+							"            console.log(\"Staff token refreshed\");",
+							"        }",
+							"    });",
+							"}"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {},
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "customer",
+			"item": [
+				{
+					"name": "Login Customer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const json = pm.response.json();",
+									"",
+									"pm.environment.set(",
+									"    \"customer_access_token\",",
+									"    json.data.login.accessToken",
+									");",
+									"",
+									"pm.environment.set(",
+									"    \"customer_refresh_token\",",
+									"    json.data.login.refreshToken",
+									");"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  login(\n    username: \"customer\"\n    password: \"password\"\n  ) {\n    refreshToken\n    accessToken\n    user {\n      id\n      username\n      email\n    }\n  }\n}",
+								"variables": ""
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Customer Create Product",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation CreateProduct($input: ProductInput!) {\n  createProduct( input: $input) {\n    product {\n      id\n      name\n      description\n      price\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Customer Create Order request",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  createOrder(\n    items: [\n      {\n        productId: \"UHJvZHVjdFR5cGU6MTg=\"\n        quantity: 2\n      }\n      {\n        productId: \"UHJvZHVjdFR5cGU6MTM=\"\n        quantity: 1\n      }\n    ]\n  ) {\n    order {\n      id\n      status\n\n      items {\n        id\n        quantity\n\n        product {\n          id\n          name\n          price\n        }\n      }\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add item request",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  addOrderItem(\n    orderId: \"T3JkZXJUeXBlOjM=\"\n    productId: \"UHJvZHVjdFR5cGU6MTk=\"\n    quantity: 2\n  ) {\n    order {\n      id\n      status\n\n      items {\n        id\n        quantity\n\n        product {\n          name\n          price\n        }\n      }\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Order Item",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  removeOrderItem(\n    orderId: \"T3JkZXJUeXBlOjM=\"\n    itemId: \"T3JkZXJJdGVtVHlwZTo3\"\n  ) {\n    success\n\n    order {\n      id\n      status\n\n      items {\n        id\n        quantity\n\n        product {\n          name\n        }\n      }\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Cancel Request",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  cancelOrder(\n    id: \"T3JkZXJUeXBlOjQ=\"\n  ) {\n    success\n\n    order {\n      id\n      status\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "list customer orders",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query {\n  orders {\n    id\n    status\n    createdAt\n    items {\n      id\n      quantity\n      product {\n        id\n        name\n      }\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Log out",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query {\n  orders {\n    id\n    status\n    createdAt\n    items {\n      id\n      quantity\n      product {\n        id\n        name\n      }\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Products",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query {\n  products(first: 10, \n    orderBy:\"price\", minPrice:\"50\", maxPrice:\"2000\") {\n    edges {\n      node {\n        id\n        name\n        price\n      }\t\n      cursor\n    }\n\n    pageInfo {\n      hasNextPage\n      hasPreviousPage\n      startCursor\n      endCursor\n    }\n  }\n}",
+								"variables": ""
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {},
+						"exec": [
+							"const accessToken = pm.environment.get(\"customer_access_token\");",
+							"const refreshToken = pm.environment.get(\"customer_refresh_token\");",
+							"",
+							"function isTokenExpired(token) {",
+							"    if (!token) return true;",
+							"",
+							"    try {",
+							"        const payload = JSON.parse(",
+							"            atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))",
+							"        );",
+							"",
+							"        const now = Math.floor(Date.now() / 1000);",
+							"",
+							"        return payload.exp <= now + 10;",
+							"    } catch (e) {",
+							"        return true;",
+							"    }",
+							"}",
+							"",
+							"if (isTokenExpired(accessToken)) {",
+							"",
+							"    const query = `",
+							"        mutation RefreshToken($refreshToken: String!) {",
+							"            refreshToken(refreshToken: $refreshToken) {",
+							"                token",
+							"                refreshToken",
+							"            }",
+							"        }",
+							"    `;",
+							"",
+							"    pm.sendRequest({",
+							"        url: pm.environment.get(\"graphql_url\"),",
+							"        method: \"POST\",",
+							"        header: {",
+							"            \"Content-Type\": \"application/json\"",
+							"        },",
+							"        body: {",
+							"            mode: \"raw\",",
+							"            raw: JSON.stringify({",
+							"                query: query,",
+							"                variables: {",
+							"                    refreshToken: refreshToken",
+							"                }",
+							"            })",
+							"        }",
+							"    }, function (err, response) {",
+							"",
+							"        if (err) {",
+							"            console.error(\"Refresh failed:\", err);",
+							"            return;",
+							"        }",
+							"",
+							"        const data = response.json();",
+							"",
+							"        if (data.data && data.data.refreshToken) {",
+							"            pm.environment.set(",
+							"                \"staff_access_token\",",
+							"                data.data.refreshToken.token",
+							"            );",
+							"",
+							"            if (data.data.refreshToken.refreshToken) {",
+							"                pm.environment.set(",
+							"                    \"staff_refresh_token\",",
+							"                    data.data.refreshToken.refreshToken",
+							"                );",
+							"            }",
+							"",
+							"            console.log(\"Staff token refreshed\");",
+							"        }",
+							"    });",
+							"}"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {},
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "customer 2",
+			"item": [
+				{
+					"name": "Login Customer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const json = pm.response.json();",
+									"",
+									"pm.environment.set(",
+									"    \"customer_2_access_token\",",
+									"    json.data.login.accessToken",
+									");",
+									"",
+									"pm.environment.set(",
+									"    \"customer_2_refresh_token\",",
+									"    json.data.login.refreshToken",
+									");"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"packages": {},
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  login(\n    username: \"customer2\"\n    password: \"password\"\n  ) {\n    refreshToken\n    accessToken\n    user {\n      id\n      username\n      email\n    }\n  }\n}",
+								"variables": ""
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Customer Create Product",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_2_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation CreateProduct($input: ProductInput!) {\n  createProduct( input: $input) {\n    product {\n      id\n      name\n      description\n      price\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Customer Create Order request",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_2_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  createOrder(\n    items: [\n      {\n        productId: \"UHJvZHVjdFR5cGU6MTg=\"\n        quantity: 2\n      }\n      {\n        productId: \"UHJvZHVjdFR5cGU6MTM=\"\n        quantity: 1\n      }\n    ]\n  ) {\n    order {\n      id\n      status\n\n      items {\n        id\n        quantity\n\n        product {\n          id\n          name\n          price\n        }\n      }\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add item request",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_2_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  addOrderItem(\n    orderId: \"T3JkZXJUeXBlOjM=\"\n    productId: \"UHJvZHVjdFR5cGU6MTk=\"\n    quantity: 2\n  ) {\n    order {\n      id\n      status\n\n      items {\n        id\n        quantity\n\n        product {\n          name\n          price\n        }\n      }\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Order Item",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_2_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  removeOrderItem(\n    orderId: \"T3JkZXJUeXBlOjM=\"\n    itemId: \"T3JkZXJJdGVtVHlwZTo3\"\n  ) {\n    success\n\n    order {\n      id\n      status\n\n      items {\n        id\n        quantity\n\n        product {\n          name\n        }\n      }\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Cancel Request",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_2_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  cancelOrder(\n    id: \"T3JkZXJUeXBlOjQ=\"\n  ) {\n    success\n\n    order {\n      id\n      status\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "list customer orders",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customer_2_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query {\n  orders {\n    id\n    status\n    createdAt\n    items {\n      id\n      quantity\n      product {\n        id\n        name\n      }\n    }\n  }\n}",
+								"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {},
+						"exec": [
+							"const accessToken = pm.environment.get(\"customer_2_access_token\");",
+							"const refreshToken = pm.environment.get(\"customer_2_refresh_token\");",
+							"",
+							"function isTokenExpired(token) {",
+							"    if (!token) return true;",
+							"",
+							"    try {",
+							"        const payload = JSON.parse(",
+							"            atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))",
+							"        );",
+							"",
+							"        const now = Math.floor(Date.now() / 1000);",
+							"",
+							"        return payload.exp <= now + 10;",
+							"    } catch (e) {",
+							"        return true;",
+							"    }",
+							"}",
+							"",
+							"if (isTokenExpired(accessToken)) {",
+							"",
+							"    const query = `",
+							"        mutation RefreshToken($refreshToken: String!) {",
+							"            refreshToken(refreshToken: $refreshToken) {",
+							"                token",
+							"                refreshToken",
+							"            }",
+							"        }",
+							"    `;",
+							"",
+							"    pm.sendRequest({",
+							"        url: pm.environment.get(\"graphql_url\"),",
+							"        method: \"POST\",",
+							"        header: {",
+							"            \"Content-Type\": \"application/json\"",
+							"        },",
+							"        body: {",
+							"            mode: \"raw\",",
+							"            raw: JSON.stringify({",
+							"                query: query,",
+							"                variables: {",
+							"                    refreshToken: refreshToken",
+							"                }",
+							"            })",
+							"        }",
+							"    }, function (err, response) {",
+							"",
+							"        if (err) {",
+							"            console.error(\"Refresh failed:\", err);",
+							"            return;",
+							"        }",
+							"",
+							"        const data = response.json();",
+							"",
+							"        if (data.data && data.data.refreshToken) {",
+							"            pm.environment.set(",
+							"                \"staff_access_token\",",
+							"                data.data.refreshToken.token",
+							"            );",
+							"",
+							"            if (data.data.refreshToken.refreshToken) {",
+							"                pm.environment.set(",
+							"                    \"staff_refresh_token\",",
+							"                    data.data.refreshToken.refreshToken",
+							"                );",
+							"            }",
+							"",
+							"            console.log(\"Staff token refreshed\");",
+							"        }",
+							"    });",
+							"}"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {},
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "signup",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  signup(\n    username: \"customer2\"\n    email: \"customer2@example.com\"\n    password: \"password\"\n  ) {\n    accessToken\n\n    user {\n      id\n      username\n      email\n    }\n  }\n}",
+								"variables": ""
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  login(\n    username: \"nouar.ismail\"\n    password: \"MyPassword123!\"\n  ) {\n    accessToken\n    user {\n      id\n      username\n      email\n    }\n  }\n}",
+								"variables": ""
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login admin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-CSRFToken",
+								"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation {\n  login(\n    username: \"admin\"\n    password: \"password\"\n  ) {\n    accessToken\n    user {\n      id\n      username\n      email\n    }\n  }\n}",
+								"variables": ""
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Product Details",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "graphql",
+					"graphql": {
+						"query": "query {\n  product(id:\"UHJvZHVjdFR5cGU6MTQ=\") {\n    \n\tid\n    name\n    description\n    price\n  }\n}",
+						"variables": ""
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}",
+					"host": [
+						"{{baseUrl}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Product",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-CSRFToken",
+						"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "graphql",
+					"graphql": {
+						"query": "mutation UpdateProduct($id:ID!,$input: ProductInput!) {\n  updateProduct(id:$id, input: $input) {\n    product {\n      id\n      name\n      description\n      price\n    }\n  }\n}",
+						"variables": "{\n  \"id\": \"UHJvZHVjdFR5cGU6MTQ=\",\n  \"input\": {\n    \"name\": \"Laptop updated\",\n    \"description\": \"Updated description\",\n    \"price\": \"20.99\",\n    \"categoryId\": 1\n  }\n}"
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}",
+					"host": [
+						"{{baseUrl}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Me",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo0LCJ1c2VybmFtZSI6Im5vdWFyLmlzbWFpbCIsImlhdCI6MTc4NzEzNDYwOSwiZXhwIjoxNzg3MTM4MjA5fQ.4s84rFj4Q6L_G-wg08xvy63s-3NDKTCjJIJtHvTQmR4",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "graphql",
+					"graphql": {
+						"query": "query{\n    me{\n        id\n        username\n        email\n    }\n}",
+						"variables": ""
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}",
+					"host": [
+						"{{baseUrl}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Guest Create Product",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo0LCJ1c2VybmFtZSI6Im5vdWFyLmlzbWFpbCIsImlhdCI6MTc4NzEzNDYwOSwiZXhwIjoxNzg3MTM4MjA5fQ.4s84rFj4Q6L_G-wg08xvy63s-3NDKTCjJIJtHvTQmR4",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-CSRFToken",
+						"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "graphql",
+					"graphql": {
+						"query": "mutation CreateProduct($input: ProductInput!) {\n  createProduct( input: $input) {\n    product {\n      id\n      name\n      description\n      price\n    }\n  }\n}",
+						"variables": "{\n  \"input\": {\n    \"name\": \"Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}",
+					"host": [
+						"{{baseUrl}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Admin Create Product",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo3LCJ1c2VybmFtZSI6ImFkbWluIiwiaWF0IjoxNzg3MTQ1NTgxLCJleHAiOjE3ODcxNDkxODF9.eed-4VOrLpXYUNU0YR69ZC6uoYaL0DNMPQoZUdwXih4",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-CSRFToken",
+						"value": "bNExrpldm6ay3gZ96XTI0QXKzQr8IfDP",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "graphql",
+					"graphql": {
+						"query": "mutation CreateProduct($input: ProductInput!) {\n  createProduct( input: $input) {\n    product {\n      id\n      name\n      description\n      price\n    }\n  }\n}",
+						"variables": "{\n  \"input\": {\n    \"name\": \"Admin Laptop\",\n    \"description\": \"Updated description\",\n    \"price\": \"10.99\",\n    \"categoryId\": 1\n  }\n}"
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}",
+					"host": [
+						"{{baseUrl}}"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
