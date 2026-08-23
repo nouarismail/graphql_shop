@@ -55,7 +55,9 @@ shop/
     id_service.py             Relay global ID validation
     order_service.py          Order and order-item write operations
     product_service.py        Product read and write operations
-  models.py                   Shop and token-state models
+    token_store.py            Redis token revocation and version storage
+  models.py                   Shop models and legacy token-state models
+compose.yaml                  Local persistent Redis service
 requirements.txt              Python dependencies
 manage.py                     Django command-line entry point
 ```
@@ -82,7 +84,30 @@ venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-### 3. Create the PostgreSQL database
+### 3. Start Redis
+
+Refresh-token rotation and logout require Redis. The included service enables AOF
+persistence and disables key eviction so logout state is not silently discarded:
+
+```bash
+docker compose up -d redis
+docker compose ps
+```
+
+The application uses `redis://127.0.0.1:6379/0` by default. These environment
+variables can override the connection:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis connection URL and database |
+| `REDIS_TOKEN_KEY_PREFIX` | `graphql-shop:tokens` | Namespace for authentication keys |
+| `REDIS_SOCKET_TIMEOUT` | `2` | Connect/read timeout in seconds |
+
+Redis is security-critical for this implementation. If it is unavailable, token
+creation and authentication fail closed instead of accepting a token whose
+revocation state cannot be checked.
+
+### 4. Create the PostgreSQL database
 
 The development settings currently expect:
 
@@ -96,18 +121,17 @@ The development settings currently expect:
 
 
 
-### 4. Apply migrations
+### 5. Apply migrations
 
 ```bash
 python manage.py migrate
 ```
 
-The token migrations are required for logout and refresh-token revocation:
+Migrations `0003` and `0004` created the original database token-state tables.
+They remain in migration history for compatibility, but current authentication
+uses Redis and no longer reads or writes those tables.
 
-- `0003_revokedrefreshtoken` creates the refresh-token blacklist.
-- `0004_usertokenstate` creates the per-user token version.
-
-### 5. Create roles and permissions
+### 6. Create roles and permissions
 
 ```bash
 python manage.py setup_roles
@@ -121,7 +145,7 @@ This command creates Groups:
 Signup expects the `Customer` group to exist, so run this command before using the
 `signup` mutation.
 
-### 6. Seed data
+### 7. Seed data
 
 ```bash
 python manage.py seed
@@ -129,13 +153,13 @@ python manage.py seed
 
 The seed command creates sample users, categories, products,
 
-### 7. Create an administrator
+### 8. Create an administrator
 
 ```bash
 python manage.py createsuperuser
 ```
 
-### 8. Run the development server
+### 9. Run the development server
 
 ```bash
 python manage.py runserver
@@ -230,15 +254,21 @@ mutation Logout($token: String!) {
 }
 ```
 
-Logout performs two server-side actions:
+Logout performs two Redis-backed server-side actions:
 
-1. It revokes the supplied refresh token by recording its `jti`.
-2. It increments the user's `UserTokenState.version`.
+1. It stores `graphql-shop:tokens:revoked:<jti>` with a TTL equal to the token's
+   remaining lifetime.
+2. It increments `graphql-shop:tokens:version:<user_id>`.
 
 Every access and refresh token contains the version active when it was issued.
-Authentication compares that claim to the database. Once logout increments the
-database version, all older tokens are rejected immediately. Logout therefore
-currently signs the user out on every device.
+Authentication compares that claim to Redis. Once logout increments the Redis
+version, all older access and refresh tokens are rejected immediately. Logout
+therefore signs the user out on every device.
+
+Refresh rotation writes the revocation key with Redis `SET NX EX`. `NX` means
+only the first concurrent attempt can consume a refresh token; `EX` removes the
+key automatically when the JWT would have expired, so the blacklist does not
+grow indefinitely.
 
 After a successful logout, the client should delete its stored access and refresh
 tokens.

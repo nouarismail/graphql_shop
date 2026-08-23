@@ -56,7 +56,8 @@ def refresh(refresh_token):
     user = get_user_from_refresh_token(refresh_token)
     if user is None:
         raise Exception("Invalid or expired refresh token")
-    revoke_refresh_token(refresh_token)
+    if not revoke_refresh_token(refresh_token):
+        raise Exception("Invalid or expired refresh token")
     return _tokens_for(user)
 
 

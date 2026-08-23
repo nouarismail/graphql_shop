@@ -4,21 +4,23 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.db.models import F
 
-from ..models import RevokedRefreshToken, UserTokenState
+from ..services.token_store import (
+    get_user_token_version,
+    increment_user_token_version,
+    is_refresh_token_revoked,
+    revoke_refresh_token as store_revoked_refresh_token,
+)
 
 
 def _generate_token(user, token_type, lifetime):
 
     now = datetime.now(timezone.utc)
-    token_state, _ = UserTokenState.objects.get_or_create(user=user)
-
     payload = {
         "user_id": user.id,
         "username": user.username,
         "token_type": token_type,
-        "token_version": token_state.version,
+        "token_version": get_user_token_version(user.id),
         "iat": now,
         "exp": now + timedelta(seconds=lifetime),
     }
@@ -81,7 +83,7 @@ def decode_refresh_token(token):
     if not payload or not payload.get("jti"):
         return None
 
-    if RevokedRefreshToken.objects.filter(jti=payload["jti"]).exists():
+    if is_refresh_token_revoked(payload["jti"]):
         return None
 
     return payload
@@ -95,20 +97,11 @@ def revoke_refresh_token(token):
         return False
 
     try:
-        user = User.objects.get(id=payload["user_id"])
-        expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
-    except (User.DoesNotExist, KeyError, TypeError, ValueError):
+        expires_at = float(payload["exp"])
+    except (KeyError, TypeError, ValueError):
         return False
 
-    RevokedRefreshToken.objects.get_or_create(
-        jti=payload["jti"],
-        defaults={
-            "user": user,
-            "expires_at": expires_at,
-        },
-    )
-
-    return True
+    return store_revoked_refresh_token(payload["jti"], expires_at)
 
 
 def get_user_from_refresh_token(token):
@@ -130,11 +123,7 @@ def get_user_from_refresh_token(token):
 
 
 def invalidate_user_tokens(user):
-
-    token_state, _ = UserTokenState.objects.get_or_create(user=user)
-    UserTokenState.objects.filter(pk=token_state.pk).update(
-        version=F("version") + 1
-    )
+    return increment_user_token_version(user.id)
 
 
 def _has_current_token_version(user, payload):
@@ -144,8 +133,7 @@ def _has_current_token_version(user, payload):
     except KeyError:
         return False
 
-    token_state, _ = UserTokenState.objects.get_or_create(user=user)
-    return token_version == token_state.version
+    return token_version == get_user_token_version(user.id)
 
 
 def get_user_from_token(token):

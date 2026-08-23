@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -111,6 +112,11 @@ JWT_SECRET_KEY = SECRET_KEY
 JWT_ALGORITHM = "HS256"
 JWT_ACCESS_TOKEN_LIFETIME = 60 * 60 * 6 
 JWT_REFRESH_TOKEN_LIFETIME = 60 * 60 * 24 * 7
+
+# Redis-backed JWT revocation and per-user logout state.
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+REDIS_TOKEN_KEY_PREFIX = os.getenv("REDIS_TOKEN_KEY_PREFIX", "graphql-shop:tokens")
+REDIS_SOCKET_TIMEOUT = float(os.getenv("REDIS_SOCKET_TIMEOUT", "2"))
 
 
 # Internationalization
