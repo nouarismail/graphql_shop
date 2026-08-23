@@ -49,6 +49,12 @@ shop/
     seed.py                   Sample data command
     setup_roles.py            Customer and Staff role setup
   migrations/                 Database migrations
+  services/
+    auth_service.py           Signup, login, refresh, and logout workflows
+    category_service.py       Category write operations
+    id_service.py             Relay global ID validation
+    order_service.py          Order and order-item write operations
+    product_service.py        Product read and write operations
   models.py                   Shop and token-state models
 requirements.txt              Python dependencies
 manage.py                     Django command-line entry point
@@ -533,14 +539,16 @@ A Postman collection is included in the `postman/` directory.
 
 Import:
 
-- `ecommerce-api.postman_collection.json`
-- `ecommerce-local.postman_environment.example.json`
+- `GraphQL.postman_collection.json`
+- `GraphQL Shop Local.postman_environment.json`
 
-Then configure the environment variables such as:
+Select the `GraphQL Shop Local` environment and configure its customer and staff
+credentials. The collection stores returned tokens and Relay IDs automatically.
+For a complete run, execute folders in this order:
 
-- `baseUrl`
-- `staffAccessToken`
-- `staffRefreshToken`
-- `customerAccessToken`
-- `customerRefreshToken`
+1. `Authentication` (use either signup or login for the customer)
+2. `Catalog`
+3. `Orders`
+4. `Cleanup` (optional; deletes the created product and logs out)
 
+The staff account must belong to the `Staff` group created by `setup_roles`.
