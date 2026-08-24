@@ -9,6 +9,7 @@ authentication with refresh-token rotation and immediate logout invalidation.
 - Python 3.12
 - Django 6.1
 - Graphene and Graphene-Django
+- Django REST Framework
 - PostgreSQL with Psycopg 3
 - django-filter
 - PyJWT
@@ -29,6 +30,7 @@ authentication with refresh-token rotation and immediate logout invalidation.
 - Order cancellation and status updates
 - Customer-specific order visibility
 - Relay global IDs for products, users, orders, and order items
+- REST endpoints mirroring the GraphQL authentication, catalog, and order workflows
 
 ## Project structure
 
@@ -48,6 +50,12 @@ shop/
     queries.py                GraphQL queries
     schema.py                 Root GraphQL schema
     types.py                  Graphene Django object types
+  rest_api/
+    authentication.py        Bearer JWT authentication for DRF
+    permissions.py           Catalog and order authorization policies
+    serializers.py           REST request and response schemas
+    urls.py                  REST router and authentication routes
+    views.py                 Authentication, catalog, and order endpoints
   management/commands/
     seed.py                   Sample data command
     setup_roles.py            Customer and Staff role setup
@@ -575,6 +583,96 @@ mutation UpdateOrderStatus($id: ID!, $status: OrderStatusEnum!) {
   }
 }
 ```
+
+## REST API
+
+The REST API is available under `/api/` and uses the same services, permissions,
+JWT tokens, Redis revocation state, and catalog cache as GraphQL. REST resources
+use ordinary integer IDs; Relay global IDs remain specific to GraphQL.
+
+Send authenticated requests with:
+
+```http
+Authorization: Bearer ACCESS_TOKEN
+Content-Type: application/json
+```
+
+### Authentication endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/auth/signup/` | Create a customer and return a token pair |
+| `POST` | `/api/auth/login/` | Authenticate and return a token pair |
+| `POST` | `/api/auth/refresh/` | Rotate a refresh token |
+| `POST` | `/api/auth/logout/` | Revoke the refresh token and invalidate old tokens |
+| `GET` | `/api/auth/me/` | Return the authenticated user |
+
+Signup body:
+
+```json
+{
+  "username": "customer",
+  "email": "customer@example.com",
+  "password": "a-strong-password"
+}
+```
+
+Login uses `username` and `password`. Refresh and logout accept:
+
+```json
+{ "refresh_token": "REFRESH_TOKEN" }
+```
+
+### Catalog endpoints
+
+| Method | Endpoint | Permission |
+|---|---|---|
+| `GET` | `/api/products/` | Public |
+| `GET` | `/api/products/{id}/` | Public |
+| `POST` | `/api/products/` | `shop.add_product` |
+| `PUT/PATCH` | `/api/products/{id}/` | `shop.change_product` |
+| `DELETE` | `/api/products/{id}/` | `shop.delete_product` |
+| `GET` | `/api/categories/` | Public |
+| `GET` | `/api/categories/{id}/` | Public |
+| `POST` | `/api/categories/` | `shop.add_category` |
+| `PUT/PATCH` | `/api/categories/{id}/` | `shop.change_category` |
+| `DELETE` | `/api/categories/{id}/` | `shop.delete_category` |
+
+Product lists support pagination, search, ordering, and filters, for example:
+
+```text
+/api/products/?page=1&search=keyboard&category_id=1&price__gte=10&price__lte=500&ordering=-price
+```
+
+Catalog GET responses use the same versioned Redis cache invalidated by product
+and category model signals.
+
+### Order endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/orders/` | List orders visible to the user |
+| `GET` | `/api/orders/{id}/` | Retrieve a visible order |
+| `POST` | `/api/orders/` | Create an order |
+| `POST` | `/api/orders/{id}/items/` | Add an item or increase its quantity |
+| `PATCH` | `/api/orders/{id}/items/{item_id}/` | Change item quantity |
+| `DELETE` | `/api/orders/{id}/items/{item_id}/` | Remove an item |
+| `POST` | `/api/orders/{id}/cancel/` | Cancel an allowed order |
+| `PATCH` | `/api/orders/{id}/status/` | Staff status update |
+
+Create-order body:
+
+```json
+{
+  "items": [
+    { "product_id": 1, "quantity": 2 },
+    { "product_id": 3, "quantity": 1 }
+  ]
+}
+```
+
+Customers see and modify only their own eligible orders. Staff users with the
+corresponding Django permissions and superusers can operate across users.
 
 
 ## Postman Collection

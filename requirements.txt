@@ -7,3 +7,4 @@ promise==2.3
 psycopg[binary]==3.3.4
 PyJWT==2.13.0
 redis==8.1.0
+djangorestframework==3.18.0

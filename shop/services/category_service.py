@@ -1,15 +1,21 @@
 from ..models import Category
 from .id_service import decode_global_id
 
-
-def create_category(name):
-    return Category.objects.create(name=name)
+_UNSET = object()
 
 
-def update_category(global_id, name):
+def create_category(name, description=None):
+    return Category.objects.create(name=name, description=description)
+
+
+def update_category(global_id, name, description=_UNSET):
     category = _get_category(global_id)
     category.name = name
-    category.save(update_fields=["name"])
+    update_fields = ["name"]
+    if description is not _UNSET:
+        category.description = description
+        update_fields.append("description")
+    category.save(update_fields=update_fields)
     return category
 
 
