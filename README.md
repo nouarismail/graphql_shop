@@ -12,11 +12,13 @@ authentication with refresh-token rotation and immediate logout invalidation.
 - PostgreSQL with Psycopg 3
 - django-filter
 - PyJWT
+- Redis
 
 ## Features
 
 - Product and category management
 - Product filtering by price and category
+- Redis caching for product and category queries
 - Customer signup and login
 - Short-lived access tokens and rotating refresh tokens
 - Server-side refresh-token revocation
@@ -38,6 +40,7 @@ shop/
   graphql/
     auth.py                   Authorization-header handling
     filters.py                Product filters
+    fields.py                 Redis-cached product connection field
     inputs.py                 GraphQL input and enum definitions
     jwt.py                    Token creation, validation, rotation, revocation
     mutations.py              GraphQL mutations
@@ -51,11 +54,13 @@ shop/
   migrations/                 Database migrations
   services/
     auth_service.py           Signup, login, refresh, and logout workflows
+    catalog_cache.py          Catalog cache keys, reads, and invalidation
     category_service.py       Category write operations
     id_service.py             Relay global ID validation
     order_service.py          Order and order-item write operations
     product_service.py        Product read and write operations
     token_store.py            Redis token revocation and version storage
+  signals.py                  Catalog invalidation after model writes
   models.py                   Shop models and legacy token-state models
 compose.yaml                  Local persistent Redis service
 requirements.txt              Python dependencies
@@ -102,10 +107,19 @@ variables can override the connection:
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis connection URL and database |
 | `REDIS_TOKEN_KEY_PREFIX` | `graphql-shop:tokens` | Namespace for authentication keys |
 | `REDIS_SOCKET_TIMEOUT` | `2` | Connect/read timeout in seconds |
+| `REDIS_CACHE_URL` | `redis://127.0.0.1:6379/1` | Product/category cache database |
+| `CATALOG_CACHE_TIMEOUT` | `300` | Catalog entry lifetime in seconds |
 
 Redis is security-critical for this implementation. If it is unavailable, token
 creation and authentication fail closed instead of accepting a token whose
 revocation state cannot be checked.
+
+Catalog caching is isolated in Redis database `1`. Product lists are cached per
+filter/order combination, individual products by ID, and categories with their
+prefetched products. Product or category writes increment a catalog version key,
+making older entries immediately unreachable. Unlike token storage, catalog
+caching fails open: if Redis is unavailable, queries use PostgreSQL and writes
+continue normally.
 
 ### 4. Create the PostgreSQL database
 

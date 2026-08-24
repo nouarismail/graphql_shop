@@ -4,6 +4,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase, override_settings
 
 from .services import token_store
+from .services.catalog_cache import cached_or_load, invalidate_catalog_cache
 
 
 @override_settings(
@@ -52,3 +53,51 @@ class TokenStoreTests(SimpleTestCase):
 
         with self.assertRaises(token_store.TokenStoreUnavailable):
             token_store.is_refresh_token_revoked("token-jti")
+
+
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "catalog-cache-tests",
+        }
+    },
+    CATALOG_CACHE_TIMEOUT=60,
+)
+class CatalogCacheTests(SimpleTestCase):
+    def test_loader_runs_only_on_cache_miss(self):
+        calls = []
+
+        def loader():
+            calls.append(True)
+            return ["product"]
+
+        self.assertEqual(cached_or_load("products", loader), ["product"])
+        self.assertEqual(cached_or_load("products", loader), ["product"])
+        self.assertEqual(len(calls), 1)
+
+    def test_filter_arguments_create_separate_entries(self):
+        cheap = cached_or_load(
+            "products",
+            lambda: ["cheap"],
+            arguments={"max_price": 10},
+        )
+        expensive = cached_or_load(
+            "products",
+            lambda: ["expensive"],
+            arguments={"min_price": 100},
+        )
+
+        self.assertEqual(cheap, ["cheap"])
+        self.assertEqual(expensive, ["expensive"])
+
+    def test_invalidation_changes_the_catalog_version(self):
+        calls = []
+
+        def loader():
+            calls.append(True)
+            return len(calls)
+
+        self.assertEqual(cached_or_load("categories", loader), 1)
+        invalidate_catalog_cache()
+        self.assertEqual(cached_or_load("categories", loader), 2)

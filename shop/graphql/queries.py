@@ -1,12 +1,13 @@
 import graphene
 from graphql_relay import from_global_id
-from  .types import ProductConnection, UserType, ProductType, CategoryType, OrderType
+from  .types import  UserType, ProductType, CategoryType, OrderType
 from ..models import Category, Product, Order
 from django.contrib.auth.models import User
-from graphene_django.filter import DjangoFilterConnectionField
 from .filters import ProductFilter
+from .fields import CachedDjangoFilterConnectionField
 from .auth import get_current_user
 from .permissions import can_view_order, get_visible_orders
+from ..services.catalog_cache import cached_or_load
 
 class Query(graphene.ObjectType):
     user = graphene.Field(UserType, id=graphene.Int())
@@ -17,7 +18,7 @@ class Query(graphene.ObjectType):
     users = graphene.List(UserType)
     categories = graphene.List(CategoryType)
     node = graphene.relay.Node.Field()
-    products = DjangoFilterConnectionField(
+    products = CachedDjangoFilterConnectionField(
         ProductType,
         filterset_class=ProductFilter,
     )
@@ -36,7 +37,12 @@ class Query(graphene.ObjectType):
         return user
 
     def resolve_categories(root, info):
-        return Category.objects.all()
+        return cached_or_load(
+            "categories",
+            lambda: list(
+                Category.objects.prefetch_related("products").order_by("id")
+            ),
+        )
 
     # def resolve_products(root, info, category_id=None, min_price=None, max_price=None, limit=None, offset=None):
     #     queryset = Product.objects.select_related("category")
@@ -109,4 +115,8 @@ class Query(graphene.ObjectType):
         if type_name != "ProductType":
             raise Exception("Invalid Product ID")
 
-        return Product.objects.get(id=database_id)
+        return cached_or_load(
+            "product",
+            lambda: Product.objects.select_related("category").get(id=database_id),
+            arguments={"id": database_id},
+        )

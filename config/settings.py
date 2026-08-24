@@ -118,6 +118,22 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 REDIS_TOKEN_KEY_PREFIX = os.getenv("REDIS_TOKEN_KEY_PREFIX", "graphql-shop:tokens")
 REDIS_SOCKET_TIMEOUT = float(os.getenv("REDIS_SOCKET_TIMEOUT", "2"))
 
+REDIS_CACHE_URL = os.getenv("REDIS_CACHE_URL", "redis://127.0.0.1:6379/1")
+CATALOG_CACHE_TIMEOUT = int(os.getenv("CATALOG_CACHE_TIMEOUT", "300"))
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_CACHE_URL,
+        "KEY_PREFIX": "graphql-shop",
+        "TIMEOUT": CATALOG_CACHE_TIMEOUT,
+        "OPTIONS": {
+            "socket_connect_timeout": REDIS_SOCKET_TIMEOUT,
+            "socket_timeout": REDIS_SOCKET_TIMEOUT,
+        },
+    }
+}
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
