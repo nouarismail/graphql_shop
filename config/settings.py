@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -38,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'graphene_django',
+    'rest_framework',
     'shop',
     'django_filters',
     
@@ -111,6 +113,43 @@ JWT_SECRET_KEY = SECRET_KEY
 JWT_ALGORITHM = "HS256"
 JWT_ACCESS_TOKEN_LIFETIME = 60 * 60 * 6 
 JWT_REFRESH_TOKEN_LIFETIME = 60 * 60 * 24 * 7
+
+# Redis-backed JWT revocation and per-user logout state.
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+REDIS_TOKEN_KEY_PREFIX = os.getenv("REDIS_TOKEN_KEY_PREFIX", "graphql-shop:tokens")
+REDIS_SOCKET_TIMEOUT = float(os.getenv("REDIS_SOCKET_TIMEOUT", "2"))
+
+REDIS_CACHE_URL = os.getenv("REDIS_CACHE_URL", "redis://127.0.0.1:6379/1")
+CATALOG_CACHE_TIMEOUT = int(os.getenv("CATALOG_CACHE_TIMEOUT", "300"))
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_CACHE_URL,
+        "KEY_PREFIX": "graphql-shop",
+        "TIMEOUT": CATALOG_CACHE_TIMEOUT,
+        "OPTIONS": {
+            "socket_connect_timeout": REDIS_SOCKET_TIMEOUT,
+            "socket_timeout": REDIS_SOCKET_TIMEOUT,
+        },
+    }
+}
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "shop.rest_api.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
+}
 
 
 # Internationalization

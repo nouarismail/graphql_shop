@@ -32,13 +32,13 @@ class ProductType(DjangoObjectType):
         return self.price * Decimal("1.2") 
     
     
-class ProductConnection(graphene.ObjectType):
+# class ProductConnection(graphene.ObjectType):
 
-    items = graphene.List(ProductType)
+#     items = graphene.List(ProductType)
 
-    total_count = graphene.Int()
+#     total_count = graphene.Int()
 
-    has_next_page = graphene.Boolean()
+#     has_next_page = graphene.Boolean()
 
 
 class OrderItemType(DjangoObjectType):

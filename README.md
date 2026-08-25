@@ -9,14 +9,17 @@ authentication with refresh-token rotation and immediate logout invalidation.
 - Python 3.12
 - Django 6.1
 - Graphene and Graphene-Django
+- Django REST Framework
 - PostgreSQL with Psycopg 3
 - django-filter
 - PyJWT
+- Redis
 
 ## Features
 
 - Product and category management
 - Product filtering by price and category
+- Redis caching for product and category queries
 - Customer signup and login
 - Short-lived access tokens and rotating refresh tokens
 - Server-side refresh-token revocation
@@ -27,6 +30,7 @@ authentication with refresh-token rotation and immediate logout invalidation.
 - Order cancellation and status updates
 - Customer-specific order visibility
 - Relay global IDs for products, users, orders, and order items
+- REST endpoints mirroring the GraphQL authentication, catalog, and order workflows
 
 ## Project structure
 
@@ -38,6 +42,7 @@ shop/
   graphql/
     auth.py                   Authorization-header handling
     filters.py                Product filters
+    fields.py                 Redis-cached product connection field
     inputs.py                 GraphQL input and enum definitions
     jwt.py                    Token creation, validation, rotation, revocation
     mutations.py              GraphQL mutations
@@ -45,11 +50,27 @@ shop/
     queries.py                GraphQL queries
     schema.py                 Root GraphQL schema
     types.py                  Graphene Django object types
+  rest_api/
+    authentication.py        Bearer JWT authentication for DRF
+    permissions.py           Catalog and order authorization policies
+    serializers.py           REST request and response schemas
+    urls.py                  REST router and authentication routes
+    views.py                 Authentication, catalog, and order endpoints
   management/commands/
     seed.py                   Sample data command
     setup_roles.py            Customer and Staff role setup
   migrations/                 Database migrations
-  models.py                   Shop and token-state models
+  services/
+    auth_service.py           Signup, login, refresh, and logout workflows
+    catalog_cache.py          Catalog cache keys, reads, and invalidation
+    category_service.py       Category write operations
+    id_service.py             Relay global ID validation
+    order_service.py          Order and order-item write operations
+    product_service.py        Product read and write operations
+    token_store.py            Redis token revocation and version storage
+  signals.py                  Catalog invalidation after model writes
+  models.py                   Shop models and legacy token-state models
+compose.yaml                  Local persistent Redis service
 requirements.txt              Python dependencies
 manage.py                     Django command-line entry point
 ```
@@ -76,7 +97,39 @@ venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-### 3. Create the PostgreSQL database
+### 3. Start Redis
+
+Refresh-token rotation and logout require Redis. The included service enables AOF
+persistence and disables key eviction so logout state is not silently discarded:
+
+```bash
+docker compose up -d redis
+docker compose ps
+```
+
+The application uses `redis://127.0.0.1:6379/0` by default. These environment
+variables can override the connection:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis connection URL and database |
+| `REDIS_TOKEN_KEY_PREFIX` | `graphql-shop:tokens` | Namespace for authentication keys |
+| `REDIS_SOCKET_TIMEOUT` | `2` | Connect/read timeout in seconds |
+| `REDIS_CACHE_URL` | `redis://127.0.0.1:6379/1` | Product/category cache database |
+| `CATALOG_CACHE_TIMEOUT` | `300` | Catalog entry lifetime in seconds |
+
+Redis is security-critical for this implementation. If it is unavailable, token
+creation and authentication fail closed instead of accepting a token whose
+revocation state cannot be checked.
+
+Catalog caching is isolated in Redis database `1`. Product lists are cached per
+filter/order combination, individual products by ID, and categories with their
+prefetched products. Product or category writes increment a catalog version key,
+making older entries immediately unreachable. Unlike token storage, catalog
+caching fails open: if Redis is unavailable, queries use PostgreSQL and writes
+continue normally.
+
+### 4. Create the PostgreSQL database
 
 The development settings currently expect:
 
@@ -90,18 +143,17 @@ The development settings currently expect:
 
 
 
-### 4. Apply migrations
+### 5. Apply migrations
 
 ```bash
 python manage.py migrate
 ```
 
-The token migrations are required for logout and refresh-token revocation:
+Migrations `0003` and `0004` created the original database token-state tables.
+They remain in migration history for compatibility, but current authentication
+uses Redis and no longer reads or writes those tables.
 
-- `0003_revokedrefreshtoken` creates the refresh-token blacklist.
-- `0004_usertokenstate` creates the per-user token version.
-
-### 5. Create roles and permissions
+### 6. Create roles and permissions
 
 ```bash
 python manage.py setup_roles
@@ -115,7 +167,7 @@ This command creates Groups:
 Signup expects the `Customer` group to exist, so run this command before using the
 `signup` mutation.
 
-### 6. Seed data
+### 7. Seed data
 
 ```bash
 python manage.py seed
@@ -123,13 +175,13 @@ python manage.py seed
 
 The seed command creates sample users, categories, products,
 
-### 7. Create an administrator
+### 8. Create an administrator
 
 ```bash
 python manage.py createsuperuser
 ```
 
-### 8. Run the development server
+### 9. Run the development server
 
 ```bash
 python manage.py runserver
@@ -224,15 +276,21 @@ mutation Logout($token: String!) {
 }
 ```
 
-Logout performs two server-side actions:
+Logout performs two Redis-backed server-side actions:
 
-1. It revokes the supplied refresh token by recording its `jti`.
-2. It increments the user's `UserTokenState.version`.
+1. It stores `graphql-shop:tokens:revoked:<jti>` with a TTL equal to the token's
+   remaining lifetime.
+2. It increments `graphql-shop:tokens:version:<user_id>`.
 
 Every access and refresh token contains the version active when it was issued.
-Authentication compares that claim to the database. Once logout increments the
-database version, all older tokens are rejected immediately. Logout therefore
-currently signs the user out on every device.
+Authentication compares that claim to Redis. Once logout increments the Redis
+version, all older access and refresh tokens are rejected immediately. Logout
+therefore signs the user out on every device.
+
+Refresh rotation writes the revocation key with Redis `SET NX EX`. `NX` means
+only the first concurrent attempt can consume a refresh token; `EX` removes the
+key automatically when the JWT would have expired, so the blacklist does not
+grow indefinitely.
 
 After a successful logout, the client should delete its stored access and refresh
 tokens.
@@ -526,21 +584,126 @@ mutation UpdateOrderStatus($id: ID!, $status: OrderStatusEnum!) {
 }
 ```
 
+## REST API
+
+The REST API is available under `/api/` and uses the same services, permissions,
+JWT tokens, Redis revocation state, and catalog cache as GraphQL. REST resources
+use ordinary integer IDs; Relay global IDs remain specific to GraphQL.
+
+Send authenticated requests with:
+
+```http
+Authorization: Bearer ACCESS_TOKEN
+Content-Type: application/json
+```
+
+### Authentication endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/auth/signup/` | Create a customer and return a token pair |
+| `POST` | `/api/auth/login/` | Authenticate and return a token pair |
+| `POST` | `/api/auth/refresh/` | Rotate a refresh token |
+| `POST` | `/api/auth/logout/` | Revoke the refresh token and invalidate old tokens |
+| `GET` | `/api/auth/me/` | Return the authenticated user |
+
+Signup body:
+
+```json
+{
+  "username": "customer",
+  "email": "customer@example.com",
+  "password": "password"
+}
+```
+
+Login uses `username` and `password`. Refresh and logout accept:
+
+```json
+{ "refresh_token": "REFRESH_TOKEN" }
+```
+
+### Catalog endpoints
+
+| Method | Endpoint | Permission |
+|---|---|---|
+| `GET` | `/api/products/` | Public |
+| `GET` | `/api/products/{id}/` | Public |
+| `POST` | `/api/products/` | `shop.add_product` |
+| `PUT/PATCH` | `/api/products/{id}/` | `shop.change_product` |
+| `DELETE` | `/api/products/{id}/` | `shop.delete_product` |
+| `GET` | `/api/categories/` | Public |
+| `GET` | `/api/categories/{id}/` | Public |
+| `POST` | `/api/categories/` | `shop.add_category` |
+| `PUT/PATCH` | `/api/categories/{id}/` | `shop.change_category` |
+| `DELETE` | `/api/categories/{id}/` | `shop.delete_category` |
+
+Product lists support pagination, search, ordering, and filters, for example:
+
+```text
+/api/products/?page=1&search=keyboard&category_id=1&price__gte=10&price__lte=500&ordering=-price
+```
+
+Catalog GET responses use the same versioned Redis cache invalidated by product
+and category model signals.
+
+### Order endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/orders/` | List orders visible to the user |
+| `GET` | `/api/orders/{id}/` | Retrieve a visible order |
+| `POST` | `/api/orders/` | Create an order |
+| `POST` | `/api/orders/{id}/items/` | Add an item or increase its quantity |
+| `PATCH` | `/api/orders/{id}/items/{item_id}/` | Change item quantity |
+| `DELETE` | `/api/orders/{id}/items/{item_id}/` | Remove an item |
+| `POST` | `/api/orders/{id}/cancel/` | Cancel an allowed order |
+| `PATCH` | `/api/orders/{id}/status/` | Staff status update |
+
+Create-order body:
+
+```json
+{
+  "items": [
+    { "product_id": 1, "quantity": 2 },
+    { "product_id": 3, "quantity": 1 }
+  ]
+}
+```
+
+Customers see and modify only their own eligible orders. Staff users with the
+corresponding Django permissions and superusers can operate across users.
+
 
 ## Postman Collection
 
-A Postman collection is included in the `postman/` directory.
+GraphQL and REST Postman collections are included in the `postman/` directory.
+
+For the REST API, import:
+
+- `REST API.postman_collection.json`
+- `GraphQL Shop REST Local.postman_environment.json`
+
+Select the `GraphQL Shop REST Local` environment, configure the customer and
+staff credentials, and run the numbered folders in order. Test scripts capture
+access/refresh tokens and category, product, order, and order-item integer IDs.
+The signup request is optional and tolerates an existing username during a
+collection run. The final cleanup folder deletes the created product and logs out.
+
+For GraphQL, import:
 
 Import:
 
-- `ecommerce-api.postman_collection.json`
-- `ecommerce-local.postman_environment.example.json`
+- `GraphQL.postman_collection.json`
+- `GraphQL Shop Local.postman_environment.json`
 
-Then configure the environment variables such as:
+Select the `GraphQL Shop Local` environment and configure its customer and staff
+credentials. The collection stores returned tokens and Relay IDs automatically.
+For a complete run, execute folders in this order:
 
-- `baseUrl`
-- `staffAccessToken`
-- `staffRefreshToken`
-- `customerAccessToken`
-- `customerRefreshToken`
+1. `Authentication` (use either signup or login for the customer)
+2. `Catalog`
+3. `Orders`
+4. `Cleanup` (optional; deletes the created product and logs out)
 
+The staff account must belong to the `Staff` group created by `setup_roles`.

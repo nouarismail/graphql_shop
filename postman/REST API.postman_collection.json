@@ -1,0 +1,291 @@
+{
+  "info": {
+    "_postman_id": "be472abd-2dc2-483d-a33b-b706850719b9",
+    "name": "GraphQL Shop REST API",
+    "description": "Complete REST API workflow. Select the GraphQL Shop REST Local environment, configure credentials, and run folders in order. Signup is optional if the customer already exists.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const optionalExistingUser = pm.info.requestName.startsWith('Optional') && pm.response.code === 400;",
+          "pm.test('Response status is successful', function () { pm.expect((pm.response.code >= 200 && pm.response.code < 300) || optionalExistingUser).to.be.true; });",
+          "if (pm.response.code !== 204) {",
+          "  pm.test('Response is JSON', function () { pm.response.to.be.json; });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000" },
+    { "key": "customerUsername", "value": "customer" },
+    { "key": "customerEmail", "value": "customer@example.com" },
+    { "key": "customerPassword", "value": "password" },
+    { "key": "staffUsername", "value": "staff" },
+    { "key": "staffPassword", "value": "password" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "staffAccessToken", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "orderItemId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1 - Authentication",
+      "item": [
+        {
+          "name": "Optional - Signup customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/signup/"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) { const data = pm.response.json(); pm.environment.set('accessToken', data.access_token); pm.environment.set('refreshToken', data.refresh_token); }"
+          ] } }]
+        },
+        {
+          "name": "Login customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login/"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const data = pm.response.json();",
+            "pm.environment.set('accessToken', data.access_token);",
+            "pm.environment.set('refreshToken', data.refresh_token);"
+          ] } }]
+        },
+        {
+          "name": "Login staff",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{staffUsername}}\",\n  \"password\": \"{{staffPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/login/"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const data = pm.response.json(); pm.environment.set('staffAccessToken', data.access_token);"
+          ] } }]
+        },
+        {
+          "name": "Current user",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/auth/me/"
+          }
+        },
+        {
+          "name": "Refresh token pair",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/refresh/"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const data = pm.response.json();",
+            "pm.environment.set('accessToken', data.access_token);",
+            "pm.environment.set('refreshToken', data.refresh_token);"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "2 - Catalog",
+      "item": [
+        {
+          "name": "List categories",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/categories/" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const data = pm.response.json(); const rows = Array.isArray(data) ? data : data.results;",
+            "if (rows && rows.length) pm.environment.set('categoryId', rows[0].id);"
+          ] } }]
+        },
+        {
+          "name": "Get category",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/categories/{{categoryId}}/" }
+        },
+        {
+          "name": "List and filter products",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/products/?page=1&search=&category_id={{categoryId}}&price__gte=0&price__lte=10000&ordering=-price",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "products", ""],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "search", "value": "" },
+                { "key": "category_id", "value": "{{categoryId}}" },
+                { "key": "price__gte", "value": "0" },
+                { "key": "price__lte", "value": "10000" },
+                { "key": "ordering", "value": "-price" }
+              ]
+            }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const data = pm.response.json(); const rows = Array.isArray(data) ? data : data.results;",
+            "if (rows && rows.length) pm.environment.set('productId', rows[0].id);"
+          ] } }]
+        },
+        {
+          "name": "Get product",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/products/{{productId}}/" }
+        },
+        {
+          "name": "Create product (staff)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{staffAccessToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"REST Postman Product\",\n  \"description\": \"Created through the REST API\",\n  \"price\": \"49.99\",\n  \"category_id\": {{categoryId}}\n}" },
+            "url": "{{baseUrl}}/api/products/"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.environment.set('productId', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "Update product (staff)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{staffAccessToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated REST Postman Product\",\n  \"price\": \"59.99\"\n}" },
+            "url": "{{baseUrl}}/api/products/{{productId}}/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 - Orders",
+      "item": [
+        {
+          "name": "Create order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"items\": [\n    { \"product_id\": {{productId}}, \"quantity\": 2 }\n  ]\n}" },
+            "url": "{{baseUrl}}/api/orders/"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const order = pm.response.json();",
+            "pm.environment.set('orderId', order.id);",
+            "if (order.items && order.items.length) pm.environment.set('orderItemId', order.items[0].id);"
+          ] } }]
+        },
+        {
+          "name": "List visible orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/orders/"
+          }
+        },
+        {
+          "name": "Get order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/orders/{{orderId}}/"
+          }
+        },
+        {
+          "name": "Add order item",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"product_id\": {{productId}},\n  \"quantity\": 1\n}" },
+            "url": "{{baseUrl}}/api/orders/{{orderId}}/items/"
+          }
+        },
+        {
+          "name": "Update order item quantity",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 4\n}" },
+            "url": "{{baseUrl}}/api/orders/{{orderId}}/items/{{orderItemId}}/"
+          }
+        },
+        {
+          "name": "Remove order item",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/orders/{{orderId}}/items/{{orderItemId}}/"
+          }
+        },
+        {
+          "name": "Update order status (staff)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{staffAccessToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"CONFIRMED\"\n}" },
+            "url": "{{baseUrl}}/api/orders/{{orderId}}/status/"
+          }
+        },
+        {
+          "name": "Cancel order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/orders/{{orderId}}/cancel/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 - Cleanup",
+      "item": [
+        {
+          "name": "Delete product (staff)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{staffAccessToken}}" }],
+            "url": "{{baseUrl}}/api/products/{{productId}}/"
+          }
+        },
+        {
+          "name": "Logout customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/logout/"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 204) { pm.environment.unset('accessToken'); pm.environment.unset('refreshToken'); }"
+          ] } }]
+        }
+      ]
+    }
+  ]
+}

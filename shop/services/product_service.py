@@ -1,9 +1,7 @@
 from ..models import Product, Category
+from .id_service import decode_global_id
 
-def create_product(input, user):
-    # if user.is_anonymous:
-    #     raise Exception("Authentication required")
-
+def create_product(input):
     try:
         category = Category.objects.get(
             id=input.category_id
@@ -20,12 +18,11 @@ def create_product(input, user):
 
     return product
 
-def update_product(id, input, user):
-    # if user.is_anonymous:
-    #     raise Exception("Authentication required")
-
+def update_product(global_id, input):
     try:
-        product = Product.objects.get(id=id)
+        product = Product.objects.get(
+            id=decode_global_id(global_id, "ProductType", "Product")
+        )
     except Product.DoesNotExist:
         raise Exception("Product does not exist")
 
@@ -54,15 +51,13 @@ def get_product(id):
 def get_all_products():
     return Product.objects.all()
 
-def delete_product(id, user):
-    # if user.is_anonymous:
-    #     raise Exception("Authentication required")
-
+def delete_product(global_id):
     try:
-        product = Product.objects.get(id=id)
+        product = Product.objects.get(
+            id=decode_global_id(global_id, "ProductType", "Product")
+        )
     except Product.DoesNotExist:
         raise Exception("Product does not exist")
 
     product.delete()
     return True
-
