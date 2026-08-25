@@ -613,7 +613,7 @@ Signup body:
 {
   "username": "customer",
   "email": "customer@example.com",
-  "password": "a-strong-password"
+  "password": "password"
 }
 ```
 
@@ -677,7 +677,20 @@ corresponding Django permissions and superusers can operate across users.
 
 ## Postman Collection
 
-A Postman collection is included in the `postman/` directory.
+GraphQL and REST Postman collections are included in the `postman/` directory.
+
+For the REST API, import:
+
+- `REST API.postman_collection.json`
+- `GraphQL Shop REST Local.postman_environment.json`
+
+Select the `GraphQL Shop REST Local` environment, configure the customer and
+staff credentials, and run the numbered folders in order. Test scripts capture
+access/refresh tokens and category, product, order, and order-item integer IDs.
+The signup request is optional and tolerates an existing username during a
+collection run. The final cleanup folder deletes the created product and logs out.
+
+For GraphQL, import:
 
 Import:
 
