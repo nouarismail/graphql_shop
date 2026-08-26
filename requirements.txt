@@ -5,6 +5,8 @@ graphene-django==3.2.3
 graphql-relay==3.2.0
 promise==2.3
 psycopg[binary]==3.3.4
+gunicorn==23.0.0
+whitenoise>=6.6,<7
 PyJWT==2.13.0
 redis==8.1.0
 djangorestframework==3.18.0
