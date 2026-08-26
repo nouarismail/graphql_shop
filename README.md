@@ -237,6 +237,97 @@ docker compose run --rm --service-ports \\
 
 steps when a deployment platform runs them as separate release tasks.
 
+## Automatic cancellation of unpaid orders with Celery
+
+In the current domain model there is no separate payment table or payment-status
+field. Consequently, `PENDING` is treated as "created but not yet paid/confirmed."
+An order that moves to `CONFIRMED`, `PROCESSING`, or another status is no longer
+eligible for automatic cancellation.
+
+Two additional containers run the background workflow:
+
+- `celery-beat` is the clock. Every `ORDER_CANCELLATION_SCAN_SECONDS`, it sends the
+  named `shop.tasks.cancel_expired_pending_orders` task to Redis.
+- `celery-worker` consumes that message and executes the database update.
+
+Redis database 2 is Celery's broker and database 3 is its result backend. They are
+separate from JWT state in database 0 and catalog cache in database 1. PostgreSQL
+remains the source of truth for order state.
+
+The defaults provide a 30-minute payment window and a scan once per minute:
+
+```dotenv
+ORDER_PENDING_TIMEOUT_SECONDS=1800
+ORDER_CANCELLATION_SCAN_SECONDS=60
+CELERY_WORKER_CONCURRENCY=2
+```
+
+Cancellation therefore occurs after roughly 30–31 minutes, not necessarily at the
+exact 30-minute boundary. A shorter scan interval gives tighter timing at the cost
+of more database queries. Apply configuration changes with:
+
+```bash
+docker compose up -d --build --force-recreate celery-worker celery-beat
+```
+
+Inspect and test the workflow:
+
+```bash
+docker compose logs -f celery-worker celery-beat
+docker compose exec web python manage.py test shop.tests.test_tasks
+docker compose exec web python manage.py shell -c \
+  "from shop.tasks import cancel_expired_pending_orders; print(cancel_expired_pending_orders.delay().get(timeout=10))"
+```
+
+### Why each Celery code line exists
+
+`config/celery.py` creates the Celery application. `import os` allows setting
+`DJANGO_SETTINGS_MODULE`; `setdefault` points worker and beat at `config.settings`
+without overwriting an explicit alternative. `Celery("config")` creates the app.
+`config_from_object(..., namespace="CELERY")` loads only settings beginning with
+`CELERY_`, preventing name collisions. `autodiscover_tasks()` searches installed
+Django apps for `tasks.py` modules.
+
+`config/__init__.py` imports that app whenever the `config` package loads. Exporting
+it through `__all__` identifies the public object and lets `celery -A config` find
+the configured application.
+
+In `shop/tasks.py`, `logging` reports useful work; `timedelta` calculates the expiry
+boundary; `shared_task` registers the function; Django `settings` supplies the
+configurable timeout; and timezone-aware `timezone.now()` matches `USE_TZ=True`.
+Importing `Order` supplies the database model.
+
+The decorator turns the function into a task, while its explicit name keeps the
+beat schedule stable. `now` is captured once so all changed rows get one timestamp.
+`cutoff` subtracts the allowed payment window. The query requires both a `PENDING`
+status and `created_at` at or before the cutoff, then bulk-updates matching rows to
+`CANCELLED`. It sets `updated_at` explicitly because bulk `update()` does not run
+the field's `auto_now`. The affected-row count is logged and returned for
+observability and testing.
+
+The status condition and update execute as one SQL statement. There is no gap
+between reading and writing in Python. If another request has already moved an
+order away from `PENDING`, PostgreSQL excludes it, so the task does not overwrite
+the newer state.
+
+In `settings.py`, the broker and result URLs select isolated Redis databases;
+task-start tracking aids inspection; the time limit bounds stuck work; startup
+retry handles Redis initialization; the order settings control age and cadence;
+and `CELERY_BEAT_SCHEDULE` maps the cadence to the stable task name.
+
+In `compose.yaml`, YAML anchors keep common application configuration identical for
+web, worker, and beat. The Celery services build the same image as `web`, replacing
+only the command. Their preparation flags are disabled because only `web` should
+run migrations, create roles, and collect static files. Health dependencies keep
+all application processes behind ready PostgreSQL and Redis services.
+The Docker image switches from root to the unprivileged `app` user before starting
+any service. Worker concurrency defaults to two processes because this task is
+small; `CELERY_WORKER_CONCURRENCY` allows deliberate scaling.
+
+If a `.env` value contains `$`, single-quote the complete value—for example,
+`DJANGO_SECRET_KEY='abc$def'`. Otherwise Compose treats `$def` as an environment
+reference and silently changes the value.
+
 ## Local setup
 ### 1. Create and activate a virtual environment
 \`\`\`bash

@@ -12,7 +12,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint
 RUN chmod +x /usr/local/bin/entrypoint
 
-COPY . .
+RUN addgroup --system app && adduser --system --ingroup app app
+COPY --chown=app:app . .
+
+USER app
 
 EXPOSE 8000
 

@@ -11,7 +11,9 @@ if [ "${SETUP_ROLES:-true}" = "true" ]; then
     python manage.py setup_roles
 fi
 
-echo "Collecting static files..."
-python manage.py collectstatic --noinput
+if [ "${COLLECT_STATIC:-true}" = "true" ]; then
+    echo "Collecting static files..."
+    python manage.py collectstatic --noinput
+fi
 
 exec "$@"
