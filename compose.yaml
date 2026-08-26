@@ -1,17 +1,63 @@
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-shop_db}
+      POSTGRES_USER: ${DB_USER:-shop_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-shop_password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   redis:
-    container_name: graphql-shop-redis
     image: redis:7-alpine
+    restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory-policy noeviction
-    ports:
-      - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-Qx9@L2$kR8^nP5&zT1*eW6}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DB_NAME: ${DB_NAME:-shop_db}
+      DB_USER: ${DB_USER:-shop_user}
+      DB_PASSWORD: ${DB_PASSWORD:-Password123}
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CACHE_URL: redis://redis:6379/1
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      SETUP_ROLES: ${SETUP_ROLES:-true}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/graphql/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 20s
 
 volumes:
+  postgres-data:
   redis-data:
