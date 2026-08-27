@@ -1,3 +1,26 @@
+x-app-environment: &app-environment
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-for-production}
+  DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+  DB_NAME: ${DB_NAME:-shop_db}
+  DB_USER: ${DB_USER:-shop_user}
+  DB_PASSWORD: ${DB_PASSWORD:-shop_password}
+  DB_HOST: db
+  DB_PORT: "5432"
+  REDIS_URL: redis://redis:6379/0
+  REDIS_CACHE_URL: redis://redis:6379/1
+  CELERY_BROKER_URL: redis://redis:6379/2
+  CELERY_RESULT_BACKEND: redis://redis:6379/3
+  ORDER_PENDING_TIMEOUT_SECONDS: ${ORDER_PENDING_TIMEOUT_SECONDS:-1800}
+  ORDER_CANCELLATION_SCAN_SECONDS: ${ORDER_CANCELLATION_SCAN_SECONDS:-60}
+  CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-2}
+
+x-app-depends-on: &app-depends-on
+  db:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
 services:
   db:
     image: postgres:16-alpine
@@ -34,29 +57,41 @@ services:
     ports:
       - "${WEB_PORT:-8000}:8000"
     environment:
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-Qx9@L2$kR8^nP5&zT1*eW6}
-      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
-      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
-      DB_NAME: ${DB_NAME:-shop_db}
-      DB_USER: ${DB_USER:-shop_user}
-      DB_PASSWORD: ${DB_PASSWORD:-Password123}
-      DB_HOST: db
-      DB_PORT: "5432"
-      REDIS_URL: redis://redis:6379/0
-      REDIS_CACHE_URL: redis://redis:6379/1
+      <<: *app-environment
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
       SETUP_ROLES: ${SETUP_ROLES:-true}
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      COLLECT_STATIC: ${COLLECT_STATIC:-true}
+    depends_on: *app-depends-on
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/graphql/', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  celery-worker:
+    build:
+      context: .
+    restart: unless-stopped
+    command: celery -A config worker --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
+    environment:
+      <<: *app-environment
+      RUN_MIGRATIONS: "false"
+      SETUP_ROLES: "false"
+      COLLECT_STATIC: "false"
+    depends_on: *app-depends-on
+
+  celery-beat:
+    build:
+      context: .
+    restart: unless-stopped
+    command: celery -A config beat --loglevel=INFO --schedule=/tmp/celerybeat-schedule
+    environment:
+      <<: *app-environment
+      RUN_MIGRATIONS: "false"
+      SETUP_ROLES: "false"
+      COLLECT_STATIC: "false"
+    depends_on: *app-depends-on
 
 volumes:
   postgres-data:
