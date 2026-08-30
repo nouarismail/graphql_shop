@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404
 from graphql_relay import to_global_id
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
+from rest_framework.exceptions import APIException, PermissionDenied, Throttled, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,6 +13,11 @@ from rest_framework.views import APIView
 from ..models import Category, Order, OrderItem, Product
 from ..services import auth_service, category_service, order_service, product_service
 from ..services.catalog_cache import cached_or_load
+from ..services.rate_limit import (
+    OrderRateLimitExceeded,
+    OrderRateLimitUnavailable,
+    enforce_order_creation_rate_limit,
+)
 from .permissions import CatalogPermission, OrderPermission
 from .serializers import (
     AddOrderItemSerializer, CategorySerializer, CreateOrderSerializer,
@@ -230,6 +235,13 @@ class OrderViewSet(viewsets.GenericViewSet):
         return Response(self.get_serializer(order).data)
 
     def create(self, request):
+        try:
+            enforce_order_creation_rate_limit(request, request.user)
+        except OrderRateLimitExceeded as exc:
+            raise Throttled(wait=exc.retry_after, detail=str(exc)) from exc
+        except OrderRateLimitUnavailable as exc:
+            raise APIException(str(exc)) from exc
+
         serializer = CreateOrderSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         items = [

@@ -9,6 +9,7 @@ from shop.services.order_service import (
     update_order_item_quantity, update_order_status,
 )
 from shop.services.product_service import create_product, delete_product, update_product
+from shop.services.rate_limit import enforce_order_creation_rate_limit
 
 from .permissions import (
     can_cancel_order, can_create_category, can_create_order, can_create_product,
@@ -92,7 +93,9 @@ class CreateOrder(graphene.Mutation):
 
     @classmethod
     def mutate(cls, root, info, items):
-        return cls(order=create_order(can_create_order(info), items))
+        user = can_create_order(info)
+        enforce_order_creation_rate_limit(info.context, user)
+        return cls(order=create_order(user, items))
 
 
 class AddOrderItem(graphene.Mutation):

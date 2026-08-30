@@ -146,6 +146,18 @@ REDIS_SOCKET_TIMEOUT = float(os.getenv("REDIS_SOCKET_TIMEOUT", "2"))
 REDIS_CACHE_URL = os.getenv("REDIS_CACHE_URL", "redis://127.0.0.1:6379/1")
 CATALOG_CACHE_TIMEOUT = int(os.getenv("CATALOG_CACHE_TIMEOUT", "300"))
 
+RATE_LIMIT_REDIS_URL = os.getenv("RATE_LIMIT_REDIS_URL", "redis://127.0.0.1:6379/4")
+ORDER_RATE_LIMIT_KEY_PREFIX = os.getenv(
+    "ORDER_RATE_LIMIT_KEY_PREFIX", "graphql-shop:order-rate-limit"
+)
+ORDER_RATE_LIMIT_REQUESTS = int(os.getenv("ORDER_RATE_LIMIT_REQUESTS", "3"))
+ORDER_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.getenv("ORDER_RATE_LIMIT_WINDOW_SECONDS", "3600")
+)
+ORDER_RATE_LIMIT_TRUST_PROXY = os.getenv(
+    "ORDER_RATE_LIMIT_TRUST_PROXY", "false"
+).lower() in {"1", "true", "yes", "on"}
+
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/2")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/3")
