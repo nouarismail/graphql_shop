@@ -15,6 +15,9 @@ RUN chmod +x /usr/local/bin/entrypoint
 RUN addgroup --system app && adduser --system --ingroup app app
 COPY --chown=app:app . .
 
+RUN mkdir -p /app/staticfiles \
+    && chown -R app:app /app/staticfiles
+
 USER app
 
 EXPOSE 8000

@@ -274,7 +274,6 @@ Inspect and test the workflow:
 
 ```bash
 docker compose logs -f celery-worker celery-beat
-docker compose exec web python manage.py test shop.tests.test_tasks
 docker compose exec web python manage.py shell -c \
   "from shop.tasks import cancel_expired_pending_orders; print(cancel_expired_pending_orders.delay().get(timeout=10))"
 ```
@@ -327,6 +326,62 @@ small; `CELERY_WORKER_CONCURRENCY` allows deliberate scaling.
 If a `.env` value contains `$`, single-quote the complete value—for example,
 `DJANGO_SECRET_KEY='abc$def'`. Otherwise Compose treats `$def` as an environment
 reference and silently changes the value.
+
+## Order-creation rate limiting
+
+Order creation through both REST and GraphQL is limited to three accepted requests
+in any rolling hour for each client IP address and independently for each
+authenticated user. A request proceeds only when both identities are below their
+limits. This means changing accounts does not bypass an IP limit, and changing IPs
+does not bypass a user limit.
+
+The defaults are configurable in `.env`:
+
+```dotenv
+ORDER_RATE_LIMIT_REQUESTS=3
+ORDER_RATE_LIMIT_WINDOW_SECONDS=3600
+ORDER_RATE_LIMIT_TRUST_PROXY=false
+```
+
+Redis database 4 stores this state, isolated from authentication (0), cache (1),
+Celery broker (2), and Celery results (3). No database migration is required.
+
+`shop/services/rate_limit.py` contains the shared implementation. `_client_ip`
+uses Django's `REMOTE_ADDR` by default. It reads the first `X-Forwarded-For` value
+only when `ORDER_RATE_LIMIT_TRUST_PROXY=true`; enable that option only when a
+trusted reverse proxy replaces the header, because clients can otherwise forge
+it. IP addresses are SHA-256 hashed before becoming Redis keys. User keys contain
+the stable database user ID.
+
+The Lua script executes entirely inside Redis as one atomic operation. It reads
+Redis server time, removes timestamps older than the configured rolling window,
+counts the remaining IP and user entries, and rejects when either count is already
+at the limit. For an accepted request it adds the same unique request identifier
+to both sorted sets and refreshes their expiration. Atomic execution prevents two
+simultaneous Gunicorn workers from both incorrectly accepting a fourth request.
+The oldest retained timestamp determines the exact retry delay.
+
+`OrderViewSet.create` invokes the limiter before REST payload validation. An
+exceeded limit becomes DRF's `Throttled` exception, producing HTTP `429 Too Many
+Requests` and a `Retry-After` header. A Redis outage produces HTTP 500 rather than
+silently disabling protection. `CreateOrder.mutate` invokes the same limiter after
+GraphQL authentication/permission checking and before the database transaction;
+GraphQL returns the limiter message in its `errors` array.
+
+Only admitted creation attempts consume quota. Failed authentication and requests
+blocked by the limiter do not. REST requests admitted by the limiter but later
+rejected by payload validation do consume quota, because they reached the protected
+order-creation endpoint. GraphQL argument-shape errors are rejected by GraphQL
+before its mutation resolver runs and therefore do not consume quota.
+
+After changing limiter settings or code, rebuild and recreate the application:
+
+```bash
+docker compose up -d --build --force-recreate web
+```
+
+If multiple application deployments must share limits, point all of them at the
+same `RATE_LIMIT_REDIS_URL` and retain the same key prefix.
 
 ## Local setup
 ### 1. Create and activate a virtual environment
