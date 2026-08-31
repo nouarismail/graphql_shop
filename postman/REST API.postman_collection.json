@@ -263,7 +263,70 @@
       ]
     },
     {
-      "name": "4 - Cleanup",
+      "name": "4 - CSV Import and Export",
+      "description": "Staff-only CSV operations. For the import request, reselect postman/test_products.csv in Postman's file picker if the saved relative path is not resolved on your machine.",
+      "item": [
+        {
+          "name": "Import products from CSV (staff)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffAccessToken}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "postman/test_products.csv"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/products/import/",
+            "description": "Uploads the sample CSV as multipart/form-data. Blank product IDs create new products. Running this request repeatedly creates duplicates."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Products imported', function () { pm.response.to.have.status(200); });",
+            "pm.test('Import summary is returned', function () { const data = pm.response.json(); pm.expect(data).to.have.keys('created', 'updated', 'total'); });"
+          ] } }]
+        },
+        {
+          "name": "Export products to CSV (staff)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffAccessToken}}" },
+              { "key": "Accept", "value": "text/csv" }
+            ],
+            "url": "{{baseUrl}}/api/products/export/",
+            "description": "Use Send and Download in Postman to save products.csv."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Product CSV returned', function () { pm.response.to.have.status(200); pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv'); });",
+            "pm.test('Product CSV has expected header', function () { pm.expect(pm.response.text()).to.include('id,name,description,price,category_id,category_name'); });"
+          ] } }]
+        },
+        {
+          "name": "Export orders to CSV (staff)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{staffAccessToken}}" },
+              { "key": "Accept", "value": "text/csv" }
+            ],
+            "url": "{{baseUrl}}/api/orders/export/",
+            "description": "Use Send and Download in Postman to save orders.csv. The report contains one row per order item."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Order CSV returned', function () { pm.response.to.have.status(200); pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv'); });",
+            "pm.test('Order CSV has expected header', function () { pm.expect(pm.response.text()).to.include('order_id,created_at,updated_at,status,customer_id'); });"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "5 - Cleanup",
       "item": [
         {
           "name": "Delete product (staff)",

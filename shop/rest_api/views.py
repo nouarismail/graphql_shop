@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from django.db.models import Prefetch
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from graphql_relay import to_global_id
 from rest_framework import status, viewsets
@@ -11,20 +12,26 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import Category, Order, OrderItem, Product
-from ..services import auth_service, category_service, order_service, product_service
+from ..services import (
+    auth_service, category_service, csv_service, order_service, product_service,
+)
 from ..services.catalog_cache import cached_or_load
 from ..services.rate_limit import (
     OrderRateLimitExceeded,
     OrderRateLimitUnavailable,
     enforce_order_creation_rate_limit,
 )
-from .permissions import CatalogPermission, OrderPermission
+from .permissions import CatalogPermission, OrderPermission, StaffCsvPermission
 from .serializers import (
     AddOrderItemSerializer, CategorySerializer, CreateOrderSerializer,
     LoginSerializer, OrderSerializer, ProductSerializer, RefreshTokenSerializer,
     SignupSerializer, UpdateOrderItemSerializer, UpdateOrderStatusSerializer,
     UserSerializer,
 )
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _service_call(function, *args, **kwargs):
@@ -99,7 +106,36 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering_fields = ["id", "name", "price"]
     search_fields = ["name", "description"]
 
+    def get_permissions(self):
+        if self.action in {"import_csv", "export_csv"}:
+            return [IsAuthenticated(), StaffCsvPermission()]
+        return super().get_permissions()
+
+    @action(detail=False, methods=["post"], url_path="import")
+    def import_csv(self, request):
+        uploaded_file = request.FILES.get("file")
+        if uploaded_file is None:
+            raise ValidationError({"file": "Attach a CSV file using the 'file' field."})
+        if not uploaded_file.name.lower().endswith(".csv"):
+            raise ValidationError({"file": "The uploaded file must have a .csv extension."})
+        try:
+            result = csv_service.import_products_csv(uploaded_file)
+        except csv_service.CsvImportError as exc:
+            raise ValidationError({"rows": exc.errors}) from exc
+        return Response(result)
+
+    @action(detail=False, methods=["get"], url_path="export")
+    def export_csv(self, request):
+        
+        response = HttpResponse(
+            csv_service.export_products_csv(), content_type="text/csv; charset=utf-8"
+        )
+        logger.info("Exporting products CSV...")
+        response["Content-Disposition"] = 'attachment; filename="products.csv"'
+        return response
+
     def list(self, request, *args, **kwargs):
+        print("Listing products...")
         arguments = {key: request.query_params.getlist(key) for key in sorted(request.query_params)}
 
         def load():
@@ -214,6 +250,19 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class OrderViewSet(viewsets.GenericViewSet):
     serializer_class = OrderSerializer
     permission_classes = [OrderPermission]
+
+    def get_permissions(self):
+        if self.action == "export_csv":
+            return [IsAuthenticated(), StaffCsvPermission()]
+        return super().get_permissions()
+
+    @action(detail=False, methods=["get"], url_path="export")
+    def export_csv(self, request):
+        response = HttpResponse(
+            csv_service.export_orders_csv(), content_type="text/csv; charset=utf-8"
+        )
+        response["Content-Disposition"] = 'attachment; filename="orders.csv"'
+        return response
 
     def get_queryset(self):
         queryset = Order.objects.select_related("user").prefetch_related(

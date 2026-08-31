@@ -28,3 +28,21 @@ class OrderPermission(BasePermission):
         if view.action == "update_status":
             return request.user.has_perm("shop.change_order")
         return request.user.has_perm("shop.view_order")
+
+
+class StaffCsvPermission(BasePermission):
+    """Restrict bulk data transfer to staff members with model permissions."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+        if not user.groups.filter(name="Staff").exists():
+            return False
+        if view.action == "import_csv":
+            return user.has_perms(("shop.add_product", "shop.change_product"))
+        if view.basename == "product":
+            return user.has_perm("shop.view_product")
+        return user.has_perm("shop.view_order")
