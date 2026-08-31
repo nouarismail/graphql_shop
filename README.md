@@ -1243,6 +1243,10 @@ Login uses \`username\` and \`password\`. Refresh and logout accept:
 
 \| \`DELETE\` | \`/api/products/{id}/\` | \`shop.delete\_product\` |
 
+\| \`POST\` | \`/api/products/import/\` | Staff with \`shop.add\_product\` and \`shop.change\_product\` |
+
+\| \`GET\` | \`/api/products/export/\` | Staff with \`shop.view\_product\` |
+
 \| \`GET\` | \`/api/categories/\` | Public |
 
 \| \`GET\` | \`/api/categories/{id}/\` | Public |
@@ -1265,6 +1269,16 @@ Catalog GET responses use the same versioned Redis cache invalidated by product
 
 and category model signals.
 
+Product CSV imports use a multipart \`file\` field. Required columns are \`name\`,
+
+\`price\`, and \`category\_id\`; optional columns are \`id\` and \`description\`.
+
+A blank \`id\` creates a product, while an existing product ID updates it. The
+
+complete file is validated before an atomic import, and validation errors include
+
+CSV row numbers. Product exports use the same columns and add \`category\_name\`.
+
 ### Order endpoints
 \| Method | Endpoint | Purpose |
 
@@ -1285,6 +1299,8 @@ and category model signals.
 \| \`POST\` | \`/api/orders/{id}/cancel/\` | Cancel an allowed order |
 
 \| \`PATCH\` | \`/api/orders/{id}/status/\` | Staff status update |
+
+\| \`GET\` | \`/api/orders/export/\` | Staff with \`shop.view\_order\`; one row per order item |
 
 Create-order body:
 

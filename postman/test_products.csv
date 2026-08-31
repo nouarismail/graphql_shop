@@ -1,0 +1,6 @@
+id,name,description,price,category_id
+,Wireless Mouse,"Ergonomic wireless mouse, USB-C rechargeable",34.99,1
+,USB-C Hub,"Seven-port hub with HDMI, Ethernet, and card reader",59.90,1
+,Django for APIs,Practical guide to building APIs with Django,44.50,2
+,GraphQL Patterns,"Schema design, pagination, and performance patterns",39.95,2
+,Noise-Cancelling Headphones,Over-ear Bluetooth headphones,129.00,1
