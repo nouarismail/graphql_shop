@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from graphql_relay import to_global_id
@@ -13,7 +13,8 @@ from rest_framework.views import APIView
 
 from ..models import Category, Order, OrderItem, Product
 from ..services import (
-    auth_service, category_service, csv_service, order_service, product_service,
+    ai_service, auth_service, category_service, csv_service, order_service,
+    product_service,
 )
 from ..services.catalog_cache import cached_or_load
 from ..services.rate_limit import (
@@ -23,10 +24,10 @@ from ..services.rate_limit import (
 )
 from .permissions import CatalogPermission, OrderPermission, StaffCsvPermission
 from .serializers import (
-    AddOrderItemSerializer, CategorySerializer, CreateOrderSerializer,
-    LoginSerializer, OrderSerializer, ProductSerializer, RefreshTokenSerializer,
-    SignupSerializer, UpdateOrderItemSerializer, UpdateOrderStatusSerializer,
-    UserSerializer,
+    AIProductSearchSerializer, AddOrderItemSerializer, CategorySerializer,
+    CreateOrderSerializer, LoginSerializer, OrderSerializer, ProductSerializer,
+    RefreshTokenSerializer, SignupSerializer, UpdateOrderItemSerializer,
+    UpdateOrderStatusSerializer, UserSerializer,
 )
 
 import logging
@@ -107,9 +108,44 @@ class ProductViewSet(viewsets.ModelViewSet):
     search_fields = ["name", "description"]
 
     def get_permissions(self):
+        if self.action == "ai_search":
+            return [AllowAny()]
         if self.action in {"import_csv", "export_csv"}:
             return [IsAuthenticated(), StaffCsvPermission()]
         return super().get_permissions()
+
+    @action(detail=False, methods=["post"], url_path="ai-search")
+    def ai_search(self, request):
+        input_serializer = AIProductSearchSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+
+        filters = _service_call(
+            ai_service.extract_product_filters,
+            input_serializer.validated_data["message"],
+        )
+
+        queryset = self.get_queryset()
+        if filters.search:
+            queryset = queryset.filter(
+                Q(name__icontains=filters.search)
+                | Q(description__icontains=filters.search)
+            )
+        if filters.category:
+            queryset = queryset.filter(category__name=filters.category)
+        if filters.min_price is not None:
+            queryset = queryset.filter(price__gte=filters.min_price)
+        if filters.max_price is not None:
+            queryset = queryset.filter(price__lte=filters.max_price)
+        if filters.ordering:
+            queryset = queryset.order_by(filters.ordering, "id")
+
+        return Response(
+            {
+                "filters": filters.model_dump(mode="json"),
+                "count": queryset.count(),
+                "products": self.get_serializer(queryset, many=True).data,
+            }
+        )
 
     @action(detail=False, methods=["post"], url_path="import")
     def import_csv(self, request):

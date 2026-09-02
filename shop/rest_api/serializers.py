@@ -87,3 +87,7 @@ class LoginSerializer(serializers.Serializer):
 
 class RefreshTokenSerializer(serializers.Serializer):
     refresh_token = serializers.CharField(trim_whitespace=False)
+
+
+class AIProductSearchSerializer(serializers.Serializer):
+    message = serializers.CharField(max_length=1000, trim_whitespace=True)

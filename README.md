@@ -219,19 +219,15 @@ and \`redis\`) on the internal network. To connect from a host database tool for
 
 debugging, temporarily add a \`ports\` mapping to the relevant service.
 
-The image does not bind-mount the source tree. This makes it reproducible: code is
+The `web` service bind-mounts the source tree at `/app` and runs Gunicorn with
 
-copied into the image and changes require \`docker compose up --build\`. For an
+`--reload`. Python source edits are therefore available inside the container
 
-auto-reloading development session, override the command and mount the source:
+immediately and automatically restart the web workers. Rebuild the image only
 
-\`\`\`bash
+when dependencies, the Dockerfile, or entrypoint change. Collected static files
 
-docker compose run --rm --service-ports \\
-
-  -v "$PWD:/app" web python manage.py runserver 0.0.0.0:8000
-
-\`\`\`
+use a separate `staticfiles` volume so the bind mount remains development-friendly.
 
 \`RUN\_MIGRATIONS=false\` or \`SETUP\_ROLES=false\` can disable those automatic startup
 
