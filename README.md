@@ -133,15 +133,21 @@ manage.py                     Django command-line entry point
 \`\`\`
 
 ## Run the complete project with Docker
-The Docker setup runs three services:
+The Docker setup runs six services:
 
-\- \`web\`: the Django API served by Gunicorn on port \`8000\`.
+\- \`nginx\`: the public HTTP entry point, published on \`WEB_PORT\` (port \`8000\` by default).
 
-\- \`db\`: PostgreSQL 16, available only to other containers in the stack.
+\- \`web\`: the private Django API served by Gunicorn on the Compose network at \`web:8000\`.
+
+\- \`db\`: PostgreSQL 16, also published on host port \`5432\` for local tools.
 
 \- \`redis\`: persistent Redis 7 storage for JWT revocation and catalog caching,
 
-  also available only inside the stack.
+  also published on host port \`6379\` for local tools.
+
+\- \`celery-worker\`: executes background tasks.
+
+\- \`celery-beat\`: schedules recurring background tasks.
 
 If you have Docker installed, copy the example environment file and start the stack:
 
@@ -157,7 +163,9 @@ On first startup, the web entrypoint waits for healthy PostgreSQL and Redis
 
 containers, applies Django migrations, creates the \`Customer\` and \`Staff\` roles,
 
-collects static files, and then starts Gunicorn. Open:
+collects static files, and then starts Gunicorn. Nginx waits for Gunicorn's health
+
+check before accepting traffic. Open:
 
 \- GraphQL/GraphiQL: \<http\://localhost:8000/graphql/>
 
@@ -191,6 +199,8 @@ docker compose ps                  # show service and health state
 
 docker compose logs -f web         # follow application logs
 
+docker compose logs -f nginx       # follow reverse-proxy access/error logs
+
 docker compose exec web python manage.py check
 
 docker compose down                # stop containers; keep database/cache data
@@ -207,17 +217,15 @@ so credentials are not committed. Replace \`DJANGO\_SECRET\_KEY\` and \`DB\_PASS
 
 for any non-local deployment, and add its DNS names to \`DJANGO\_ALLOWED\_HOSTS\`.
 
-\`WEB\_PORT\` changes the host-side port without changing the container port.
+\`WEB\_PORT\` changes the Nginx host-side port without changing its container port.
 
 PostgreSQL data lives in the \`postgres-data\` named volume and Redis AOF data in
 
-\`redis-data\`, so recreating a container does not erase state. Neither database
+\`redis-data\`, so recreating a container does not erase state. Django reaches both
 
-publishes a host port because Django reaches them by Compose service names (\`db\`
+services by their Compose names (`db` and `redis`); their published ports are for
 
-and \`redis\`) on the internal network. To connect from a host database tool for
-
-debugging, temporarily add a \`ports\` mapping to the relevant service.
+local development tools and can be removed for a production deployment.
 
 The `web` service bind-mounts the source tree at `/app` and runs Gunicorn with
 
@@ -228,6 +236,50 @@ immediately and automatically restart the web workers. Rebuild the image only
 when dependencies, the Dockerfile, or entrypoint change. Collected static files
 
 use a separate `staticfiles` volume so the bind mount remains development-friendly.
+
+### Nginx reverse proxy
+
+Only Nginx publishes an application port to the host. Gunicorn uses `expose`
+
+instead of `ports`, so it remains reachable by other Compose services but cannot
+
+be bypassed from the host. Nginx forwards `/api/`, `/graphql/`, `/admin/`, and all
+
+other dynamic paths to `web:8000`. Requests to `/static/` are read directly from
+
+the shared, read-only `staticfiles` volume populated by Django's `collectstatic`.
+
+The proxy preserves the original `Host`, scheme, and client address headers. It
+
+sets `X-Forwarded-For` from Nginx's direct client rather than trusting a value
+
+supplied by the caller. `ORDER_RATE_LIMIT_TRUST_PROXY=true` lets Django's existing
+
+order limiter use this address safely. The 120-second upstream timeout allows
+
+local Ollama requests to finish, while the 20 MB body limit accommodates catalog
+
+CSV imports. `/nginx-health` is an internal diagnostic endpoint used by Compose.
+
+The request flow is:
+
+```text
+Client -> localhost:WEB_PORT -> Nginx -> web:8000 -> Django/Gunicorn
+                                  |
+                                  +-> /static/ from the staticfiles volume
+```
+
+After adding or changing the Nginx configuration, recreate the affected services:
+
+```bash
+docker compose up -d --build --force-recreate web nginx
+docker compose ps
+curl http://localhost:${WEB_PORT:-8000}/nginx-health
+```
+
+Use `docker compose exec web ...` for management commands because Gunicorn remains
+
+the Django container even though Nginx is now the public HTTP endpoint.
 
 \`RUN\_MIGRATIONS=false\` or \`SETUP\_ROLES=false\` can disable those automatic startup
 
