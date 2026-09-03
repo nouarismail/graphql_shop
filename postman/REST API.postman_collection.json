@@ -140,6 +140,40 @@
           ] } }]
         },
         {
+          "name": "AI product search - laptop under 900",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"I need a laptop under 900 dollars\"\n}"
+            },
+            "url": "{{baseUrl}}/api/products/ai-search/",
+            "description": "Uses the local qwen3:4b Ollama model to extract filters and returns matching products. Ollama must be running and qwen3:4b must be pulled."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('AI filters are returned', function () { const data = pm.response.json(); pm.expect(data).to.have.keys('filters', 'count', 'products'); });",
+            "pm.test('Laptop budget is extracted', function () { const filters = pm.response.json().filters; pm.expect(filters.search).to.eql('laptop'); pm.expect(filters.max_price).to.eql(900); });",
+            "const data = pm.response.json(); if (data.products && data.products.length) pm.environment.set('productId', data.products[0].id);"
+          ] } }]
+        },
+        {
+          "name": "AI product search - category and price range",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Show me Electronics products between 50 and 500 dollars, cheapest first\"\n}"
+            },
+            "url": "{{baseUrl}}/api/products/ai-search/",
+            "description": "Exercises category, minimum price, maximum price, and ordering extraction. The category must exist with the exact name Electronics."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Combined AI filters are returned', function () { const filters = pm.response.json().filters; pm.expect(filters.category).to.eql('Electronics'); pm.expect(filters.min_price).to.eql(50); pm.expect(filters.max_price).to.eql(500); pm.expect(filters.ordering).to.eql('price'); });"
+          ] } }]
+        },
+        {
           "name": "Get product",
           "request": { "method": "GET", "url": "{{baseUrl}}/api/products/{{productId}}/" }
         },

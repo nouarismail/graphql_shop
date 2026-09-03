@@ -93,15 +93,15 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.getenv(
             "DB_NAME",
-            "graphql_shop"
+            "shop_db"
         ),
         "USER": os.getenv(
             "DB_USER",
-            "graphql_user"
+            "shop_user"
         ),
         "PASSWORD": os.getenv(
             "DB_PASSWORD",
-            "graphql_password"
+            "Password123"
         ),
         "HOST": os.getenv(
             "DB_HOST",

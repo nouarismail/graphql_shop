@@ -1,7 +1,9 @@
 # Python
+
 __pycache__/
 *.py[cod]
 *.pyo
+config/__pycache__/
 
 # Virtual environment
 venv/
