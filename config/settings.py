@@ -166,6 +166,14 @@ CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://127.0.0.1:63
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", "300"))
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# RabbitMQ 4 rejects the transient non-exclusive queues used by Celery's
+# remote-control pidbox. This application does not use inspect/control commands.
+CELERY_WORKER_ENABLE_REMOTE_CONTROL = os.getenv(
+    "CELERY_WORKER_ENABLE_REMOTE_CONTROL", "false"
+).lower() in {"1", "true", "yes", "on"}
+CELERY_WORKER_CANCEL_LONG_RUNNING_TASKS_ON_CONNECTION_LOSS = os.getenv(
+    "CELERY_WORKER_CANCEL_LONG_RUNNING_TASKS_ON_CONNECTION_LOSS", "true"
+).lower() in {"1", "true", "yes", "on"}
 
 
 ORDER_PENDING_TIMEOUT_SECONDS = int(os.getenv("ORDER_PENDING_TIMEOUT_SECONDS", "1800"))
