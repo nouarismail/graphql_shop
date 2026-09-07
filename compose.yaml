@@ -13,7 +13,7 @@ x-app-environment: &app-environment
   ORDER_RATE_LIMIT_REQUESTS: ${ORDER_RATE_LIMIT_REQUESTS:-3}
   ORDER_RATE_LIMIT_WINDOW_SECONDS: ${ORDER_RATE_LIMIT_WINDOW_SECONDS:-3600}
   ORDER_RATE_LIMIT_TRUST_PROXY: ${ORDER_RATE_LIMIT_TRUST_PROXY:-false}
-  CELERY_BROKER_URL: redis://redis:6379/2
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL:-amqp://shop:shop_password@rabbitmq:5672//}
   CELERY_RESULT_BACKEND: redis://redis:6379/3
   ORDER_PENDING_TIMEOUT_SECONDS: ${ORDER_PENDING_TIMEOUT_SECONDS:-1800}
   ORDER_CANCELLATION_SCAN_SECONDS: ${ORDER_CANCELLATION_SCAN_SECONDS:-60}
@@ -24,6 +24,8 @@ x-app-depends-on: &app-depends-on
   db:
     condition: service_healthy
   redis:
+    condition: service_healthy
+  rabbitmq:
     condition: service_healthy
 
 services:
@@ -58,6 +60,24 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-shop}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-shop_password}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   web:
     build:
@@ -129,4 +149,5 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  rabbitmq-data:
   staticfiles:

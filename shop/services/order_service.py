@@ -1,6 +1,7 @@
 from django.db import transaction
 
 from ..models import Order, OrderItem, Product
+from ..tasks import send_order_confirmation_email
 from .id_service import decode_global_id
 
 ALLOWED_ORDER_STATUSES = {
@@ -47,6 +48,10 @@ def create_order(user, items):
             product=_get_product(item.product_id),
             quantity=item.quantity,
         )
+    transaction.on_commit(
+        lambda: send_order_confirmation_email.delay(order.id),
+        robust=True,
+    )
     return order
 
 
