@@ -133,7 +133,7 @@ manage.py                     Django command-line entry point
 \`\`\`
 
 ## Run the complete project with Docker
-The Docker setup runs six services:
+The Docker setup runs seven services:
 
 \- \`nginx\`: the public HTTP entry point, published on \`WEB_PORT\` (port \`8000\` by default).
 
@@ -144,6 +144,10 @@ The Docker setup runs six services:
 \- \`redis\`: persistent Redis 7 storage for JWT revocation and catalog caching,
 
   also published on host port \`6379\` for local tools.
+
+\- \`rabbitmq\`: Celery's message broker; its local management UI is published on
+
+  host port \`15672\`.
 
 \- \`celery-worker\`: executes background tasks.
 
@@ -295,12 +299,22 @@ eligible for automatic cancellation.
 Two additional containers run the background workflow:
 
 - `celery-beat` is the clock. Every `ORDER_CANCELLATION_SCAN_SECONDS`, it sends the
-  named `shop.tasks.cancel_expired_pending_orders` task to Redis.
+  named `shop.tasks.cancel_expired_pending_orders` task to RabbitMQ.
 - `celery-worker` consumes that message and executes the database update.
 
-Redis database 2 is Celery's broker and database 3 is its result backend. They are
-separate from JWT state in database 0 and catalog cache in database 1. PostgreSQL
-remains the source of truth for order state.
+RabbitMQ is Celery's broker. Redis database 3 remains its result backend, separate
+from JWT state in database 0 and catalog cache in database 1. PostgreSQL remains
+the source of truth for order state.
+
+When an order is created, `create_order` registers the confirmation task with
+`transaction.on_commit`. RabbitMQ receives it only after the database transaction
+succeeds. The worker then loads the order and sends an itemized confirmation with
+Django's console email backend. This simulates delivery by printing the message in
+the worker logs:
+
+```bash
+docker compose logs -f celery-worker
+```
 
 The defaults provide a 30-minute payment window and a scan once per minute:
 
@@ -357,16 +371,16 @@ between reading and writing in Python. If another request has already moved an
 order away from `PENDING`, PostgreSQL excludes it, so the task does not overwrite
 the newer state.
 
-In `settings.py`, the broker and result URLs select isolated Redis databases;
-task-start tracking aids inspection; the time limit bounds stuck work; startup
-retry handles Redis initialization; the order settings control age and cadence;
-and `CELERY_BEAT_SCHEDULE` maps the cadence to the stable task name.
+In `settings.py`, the broker URL selects RabbitMQ and the result URL selects an
+isolated Redis database; task-start tracking aids inspection; the time limit bounds
+stuck work; startup retry handles broker initialization; the order settings control
+age and cadence; and `CELERY_BEAT_SCHEDULE` maps the cadence to the stable task name.
 
 In `compose.yaml`, YAML anchors keep common application configuration identical for
 web, worker, and beat. The Celery services build the same image as `web`, replacing
 only the command. Their preparation flags are disabled because only `web` should
 run migrations, create roles, and collect static files. Health dependencies keep
-all application processes behind ready PostgreSQL and Redis services.
+all application processes behind ready PostgreSQL, Redis, and RabbitMQ services.
 The Docker image switches from root to the unprivileged `app` user before starting
 any service. Worker concurrency defaults to two processes because this task is
 small; `CELERY_WORKER_CONCURRENCY` allows deliberate scaling.
