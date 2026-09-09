@@ -12,16 +12,28 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def env_or_secret(name, default=None):
+    """Read NAME_FILE first, then NAME, without placing file secrets in env."""
+    secret_file = os.getenv(f"{name}_FILE")
+    if secret_file:
+        try:
+            return Path(secret_file).read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise RuntimeError(f"Unable to read secret file for {name}") from exc
+    return os.getenv(name, default)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv(
+SECRET_KEY = env_or_secret(
     "DJANGO_SECRET_KEY",
     "django-insecure-local-development-only",
 )
@@ -99,7 +111,7 @@ DATABASES = {
             "DB_USER",
             "shop_user"
         ),
-        "PASSWORD": os.getenv(
+        "PASSWORD": env_or_secret(
             "DB_PASSWORD",
             "Password123"
         ),
@@ -159,8 +171,11 @@ ORDER_RATE_LIMIT_TRUST_PROXY = os.getenv(
 ).lower() in {"1", "true", "yes", "on"}
 
 
-CELERY_BROKER_URL = os.getenv(
-    "CELERY_BROKER_URL", "amqp://shop:shop_password@127.0.0.1:5672//"
+RABBITMQ_USER = os.getenv("RABBITMQ_USER", "shop")
+RABBITMQ_PASSWORD = env_or_secret("RABBITMQ_PASSWORD", "shop_password")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL") or (
+    f"amqp://{quote(RABBITMQ_USER, safe='')}:{quote(RABBITMQ_PASSWORD, safe='')}"
+    f"@{os.getenv('RABBITMQ_HOST', '127.0.0.1')}:5672//"
 )
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/3")
 CELERY_TASK_TRACK_STARTED = True

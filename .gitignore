@@ -21,6 +21,7 @@ shop/rest_api/tests.py
 
 # Environment variables / secrets
 .env
+.secrets/
 
 # Static/media files
 staticfiles/
