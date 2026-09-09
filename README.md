@@ -132,6 +132,75 @@ manage.py                     Django command-line entry point
 
 \`\`\`
 
+## Secrets with Docker Compose
+
+This project uses Docker Compose Secrets for local and single-host deployments.
+Sensitive values live in ignored files under `.secrets/`; Compose mounts each one
+read-only at `/run/secrets/<name>` and grants it only to explicitly listed services.
+They no longer appear as literal values in `compose.yaml` or `.env`.
+
+### 1. Initialize the secret files
+
+Run this once before starting a fresh stack:
+
+```bash
+chmod +x docker/init-secrets.sh
+./docker/init-secrets.sh
+```
+
+The script uses `umask 077` and OpenSSL random bytes. It never overwrites an
+existing secret, which prevents an accidental credential rotation from making an
+existing PostgreSQL or RabbitMQ volume inaccessible. It protects the host secrets
+directory with mode `0700`; its files are `0644` because local Compose preserves
+source permissions and the Django image runs as a non-root user. Other host users
+cannot traverse the private directory. `.secrets/` is ignored by Git, while
+`.secrets.example/` documents the required filenames without real values.
+
+### 2. Validate secret declarations
+
+```bash
+docker compose config --quiet
+```
+
+The top-level `secrets` section maps the local files. Each service-level `secrets`
+list is an access grant. PostgreSQL receives `db_password`, RabbitMQ receives
+`rabbitmq_password`, and the Django processes receive the credentials they need to
+connect to both services.
+
+### 3. Start or recreate the stack
+
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+PostgreSQL reads `POSTGRES_PASSWORD_FILE`. RabbitMQ's startup command reads its
+mounted password and exports it only inside that container. Django's
+`env_or_secret` helper reads each `*_FILE` path; it constructs the AMQP URL at
+runtime and URL-encodes credentials safely.
+
+### 4. Verify mounts without printing secret values
+
+```bash
+docker compose exec web sh -c \
+  'test -s /run/secrets/django_secret_key && test -s /run/secrets/db_password && test -s /run/secrets/rabbitmq_password'
+docker compose logs --tail=50 web db rabbitmq celery-worker
+```
+
+Do not use `cat /run/secrets/...` in logs or screenshots. Anyone with sufficient
+access to the Docker host can still read local Compose secret source files, so
+protect the host and backups. Compose Secrets improve delivery and service-level
+access control; they are not an encrypted cloud secret manager.
+
+### 5. Rotate credentials deliberately
+
+Changing a secret file alone does not change a password already stored inside an
+initialized PostgreSQL or RabbitMQ data volume. Rotate the credential in the
+service first, update the matching `.secrets` file, and then recreate its clients.
+Keep the Django signing key stable unless intentionally invalidating every JWT and
+signed value. Use a managed secret store such as a cloud provider's secret manager
+for multi-host production deployments, audit logging, and automatic rotation.
+
 ## Run the complete project with Docker
 The Docker setup runs seven services:
 
