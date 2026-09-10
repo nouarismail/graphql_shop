@@ -132,74 +132,88 @@ manage.py                     Django command-line entry point
 
 \`\`\`
 
-## Secrets with Docker Compose
+## Secrets with Infisical Cloud
 
-This project uses Docker Compose Secrets for local and single-host deployments.
-Sensitive values live in ignored files under `.secrets/`; Compose mounts each one
-read-only at `/run/secrets/<name>` and grants it only to explicitly listed services.
-They no longer appear as literal values in `compose.yaml` or `.env`.
+Infisical Cloud is the source of truth for sensitive configuration. A read-only
+Universal Auth machine identity fetches secrets during deployment. The ignored
+`.secrets/` directory is only a local delivery cache; Docker Compose mounts those
+files at `/run/secrets/<name>` and grants each one only to services that need it.
 
-### 1. Initialize the secret files
+### 1. Create the Infisical project
 
-Run this once before starting a fresh stack:
+Create a project in Infisical Cloud with `dev`, `staging`, and `prod` environments.
+Add these exact keys to the selected environment:
 
-```bash
-chmod +x docker/init-secrets.sh
-./docker/init-secrets.sh
+```text
+DJANGO_SECRET_KEY
+DB_PASSWORD
+RABBITMQ_PASSWORD
 ```
 
-The script uses `umask 077` and OpenSSL random bytes. It never overwrites an
-existing secret, which prevents an accidental credential rotation from making an
-existing PostgreSQL or RabbitMQ volume inaccessible. It protects the host secrets
-directory with mode `0700`; its files are `0644` because local Compose preserves
-source permissions and the Django image runs as a non-root user. Other host users
-cannot traverse the private directory. `.secrets/` is ignored by Git, while
-`.secrets.example/` documents the required filenames without real values.
+For an existing stack, copy the current values from `.secrets/` into Infisical
+before the first sync. Changing database or broker values without rotating the
+corresponding service accounts will break their clients.
 
-### 2. Validate secret declarations
+### 2. Create deployment credentials
+
+Under organization access control, create a machine identity with Universal Auth.
+Grant it read-only access to this project and environment, create a client secret,
+then save the credentials locally:
+
+```bash
+mkdir -p .infisical
+chmod 700 .infisical
+printf '%s' 'CLIENT_ID_FROM_INFISICAL' > .infisical/client-id
+printf '%s' 'CLIENT_SECRET_FROM_INFISICAL' > .infisical/client-secret
+chmod 600 .infisical/client-id .infisical/client-secret
+cp .infisical.example/config.env.example .infisical/config.env
+```
+
+Edit `.infisical/config.env` and replace its project ID. Select the US or EU API
+URL that matches the Infisical organization.
+
+Both `.infisical/` and `.secrets/` are ignored by Git. The committed
+`.infisical.example/` and `.secrets.example/` directories document their contracts.
+Use a short client-secret TTL, restrict trusted IPs when available, and never use a
+human user's token for deployment.
+
+### 3. Install the Infisical CLI and synchronize
+
+Install the official Infisical CLI, then provide the non-secret project selection:
+
+```bash
+chmod +x docker/sync-infisical-secrets.sh
+./docker/sync-infisical-secrets.sh
+```
+
+EU Cloud uses `https://eu.infisical.com`. The sync script exchanges the Universal
+Auth credentials for a short-lived access token, exports JSON to a temporary file,
+requires all three keys, and atomically replaces the Docker secret files. It never
+prints secret values. Keep `INFISICAL_PROJECT_ID` and the environment selection in
+deployment configuration; they are not secrets.
+
+### 4. Deploy and verify
 
 ```bash
 docker compose config --quiet
-```
-
-The top-level `secrets` section maps the local files. Each service-level `secrets`
-list is an access grant. PostgreSQL receives `db_password`, RabbitMQ receives
-`rabbitmq_password`, and the Django processes receive the credentials they need to
-connect to both services.
-
-### 3. Start or recreate the stack
-
-```bash
 docker compose up -d --build
+docker compose exec web sh -c \
+  'test -s /run/secrets/django_secret_key && test -s /run/secrets/db_password && test -s /run/secrets/rabbitmq_password'
 docker compose ps
 ```
 
-PostgreSQL reads `POSTGRES_PASSWORD_FILE`. RabbitMQ's startup command reads its
-mounted password and exports it only inside that container. Django's
-`env_or_secret` helper reads each `*_FILE` path; it constructs the AMQP URL at
-runtime and URL-encodes credentials safely.
+PostgreSQL reads `POSTGRES_PASSWORD_FILE`. RabbitMQ reads its mounted password at
+startup. Django's `env_or_secret` helper reads each `*_FILE` path and constructs a
+URL-encoded AMQP URL in memory.
 
-### 4. Verify mounts without printing secret values
+### 5. Rotate deliberately
 
-```bash
-docker compose exec web sh -c \
-  'test -s /run/secrets/django_secret_key && test -s /run/secrets/db_password && test -s /run/secrets/rabbitmq_password'
-docker compose logs --tail=50 web db rabbitmq celery-worker
-```
-
-Do not use `cat /run/secrets/...` in logs or screenshots. Anyone with sufficient
-access to the Docker host can still read local Compose secret source files, so
-protect the host and backups. Compose Secrets improve delivery and service-level
-access control; they are not an encrypted cloud secret manager.
-
-### 5. Rotate credentials deliberately
-
-Changing a secret file alone does not change a password already stored inside an
-initialized PostgreSQL or RabbitMQ data volume. Rotate the credential in the
-service first, update the matching `.secrets` file, and then recreate its clients.
-Keep the Django signing key stable unless intentionally invalidating every JWT and
-signed value. Use a managed secret store such as a cloud provider's secret manager
-for multi-host production deployments, audit logging, and automatic rotation.
+Changing Infisical alone does not change a password stored in an initialized
+PostgreSQL or RabbitMQ volume. Rotate the account in the service, update Infisical,
+run the sync script, and recreate its clients. Changing `DJANGO_SECRET_KEY`
+invalidates existing JWTs and Django-signed values. Availability of Infisical is
+required during synchronization, but running containers continue using their
+mounted snapshot if Infisical later becomes unavailable.
 
 ## Run the complete project with Docker
 The Docker setup runs seven services:
