@@ -15,6 +15,8 @@ env/
 db.sqlite3
 db.sqlite3-journal
 
+.infisical/
+
 # Local tests
 shop/tests.py
 shop/rest_api/tests.py
@@ -22,6 +24,7 @@ shop/rest_api/tests.py
 # Environment variables / secrets
 .env
 .secrets/
+.infisical/
 
 # Static/media files
 staticfiles/
