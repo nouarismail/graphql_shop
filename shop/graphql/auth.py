@@ -31,4 +31,7 @@ def get_current_user(info):
 
     token = parts[1]
 
-    return get_user_from_token(token)
+    user = get_user_from_token(token)
+    from ..audit import set_audit_actor
+    set_audit_actor(user)
+    return user

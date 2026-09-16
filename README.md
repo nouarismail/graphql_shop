@@ -215,6 +215,13 @@ invalidates existing JWTs and Django-signed values. Availability of Infisical is
 required during synchronization, but running containers continue using their
 mounted snapshot if Infisical later becomes unavailable.
 
+## Application auditing
+
+Catalog/order changes and authentication events are stored in PostgreSQL with
+actor attribution and request IDs. Authorized reviewers can inspect the view-only
+audit history in Django admin. See the [detailed auditing guide](docs/auditing.md)
+for setup, transaction behavior, coverage, limitations, and verification.
+
 ## System and container monitoring
 
 An optional `monitoring` profile adds Prometheus, Grafana, Node Exporter, and

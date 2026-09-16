@@ -4,6 +4,8 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group, User
 from django.db import transaction
 
+from ..audit import record_event
+
 from ..graphql.jwt import (
     generate_access_token,
     generate_refresh_token,
@@ -41,14 +43,18 @@ def signup(username, email, password):
     except Group.DoesNotExist:
         raise Exception("Customer group does not exist")
     user.groups.add(customer_group)
-    return _tokens_for(user)
+    result = _tokens_for(user)
+    record_event("auth.signup", actor=user)
+    return result
 
 
 def login(username, password):
     user = authenticate(username=username, password=password)
     if user is None:
         raise Exception("Invalid username or password")
-    return _tokens_for(user)
+    result = _tokens_for(user)
+    record_event("auth.login", actor=user)
+    return result
 
 
 @transaction.atomic
@@ -58,7 +64,9 @@ def refresh(refresh_token):
         raise Exception("Invalid or expired refresh token")
     if not revoke_refresh_token(refresh_token):
         raise Exception("Invalid or expired refresh token")
-    return _tokens_for(user)
+    result = _tokens_for(user)
+    record_event("auth.refresh", actor=user)
+    return result
 
 
 @transaction.atomic
@@ -67,4 +75,5 @@ def logout(refresh_token):
     if user is None or not revoke_refresh_token(refresh_token):
         raise Exception("Invalid or expired refresh token")
     invalidate_user_tokens(user)
+    record_event("auth.logout", actor=user)
     return True

@@ -4,6 +4,9 @@ from datetime import timedelta
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db import transaction
+
+from .audit import audit_context
 from django.utils import timezone
 
 from .models import Order
@@ -57,13 +60,15 @@ def cancel_expired_pending_orders():
     now = timezone.now()
     cutoff = now - timedelta(seconds=settings.ORDER_PENDING_TIMEOUT_SECONDS)
 
-    cancelled_count = Order.objects.filter(
-        status="PENDING",
-        created_at__lte=cutoff,
-    ).update(
-        status="CANCELLED",
-        updated_at=now,
-    )
+    cancelled_count = 0
+    with audit_context(source="celery.cancel_expired_pending_orders"), transaction.atomic():
+        orders = Order.objects.select_for_update().filter(
+            status="PENDING", created_at__lte=cutoff,
+        ).order_by("pk")
+        for order in orders.iterator():
+            order.status = "CANCELLED"
+            order.save(update_fields=["status", "updated_at"])
+            cancelled_count += 1
 
     if cancelled_count:
         logger.info("Automatically cancelled %s expired pending order(s)", cancelled_count)
