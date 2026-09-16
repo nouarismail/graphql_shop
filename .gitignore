@@ -16,6 +16,7 @@ db.sqlite3
 db.sqlite3-journal
 
 .infisical/
+shop/tests
 
 # Local tests
 shop/tests.py
@@ -37,3 +38,4 @@ media/
 # OS
 .DS_Store
 Thumbs.db
+docs/

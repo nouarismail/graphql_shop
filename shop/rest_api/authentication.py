@@ -26,6 +26,8 @@ class JWTAuthentication(BaseAuthentication):
             raise AuthenticationFailed("Authentication service is unavailable") from exc
         if user is None:
             raise AuthenticationFailed("Invalid or expired access token")
+        from ..audit import set_audit_actor
+        set_audit_actor(user)
         return user, token
 
     def authenticate_header(self, request):
