@@ -60,7 +60,7 @@ umask 077
 mkdir -p "$secrets_dir"
 chmod 700 "$secrets_dir"
 
-python3 - "$export_file" "$secrets_dir" <<'PY'
+python3 - "$export_file" "$secrets_dir" "${SYNC_MONITORING_SECRETS:-true}" <<'PY'
 import json
 import os
 from pathlib import Path
@@ -74,6 +74,11 @@ required = {
     "DB_PASSWORD": "db_password",
     "RABBITMQ_PASSWORD": "rabbitmq_password",
 }
+
+if sys.argv[3] == "true":
+    required["GRAFANA_ADMIN_PASSWORD"] = "grafana_admin_password"
+elif sys.argv[3] != "false":
+    raise SystemExit("SYNC_MONITORING_SECRETS must be true or false")
 
 payload = json.loads(export_file.read_text(encoding="utf-8"))
 

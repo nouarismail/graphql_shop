@@ -215,6 +215,13 @@ invalidates existing JWTs and Django-signed values. Availability of Infisical is
 required during synchronization, but running containers continue using their
 mounted snapshot if Infisical later becomes unavailable.
 
+## System and container monitoring
+
+An optional `monitoring` profile adds Prometheus, Grafana, Node Exporter, and
+cAdvisor, with a preconfigured host/container dashboard. See the
+[detailed monitoring guide](docs/monitoring.md) for architecture, Infisical password
+setup, startup commands, metric explanations, verification, and troubleshooting.
+
 ## Run the complete project with Docker
 The Docker setup runs seven services:
 
