@@ -5,6 +5,19 @@ categories, customer orders, role-based permissions, Relay global IDs, and JWT
 
 authentication with refresh-token rotation and immediate logout invalidation.
 
+## Automated tests and CI
+
+Run the unit tests without starting Docker services:
+
+```bash
+python manage.py test shop.tests --settings=config.test_settings --verbosity 2 --noinput
+```
+
+Install `requirements.txt` in your Python environment first. GitHub Actions runs
+Django's configuration checks and the same tests on pushes and pull requests.
+See [the CI and unit testing guide](docs/testing.md) for a detailed explanation
+of the workflow, settings, test cases, and local commands.
+
 ## Technology stack
 \- Python 3.12
 

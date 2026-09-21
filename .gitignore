@@ -16,7 +16,6 @@ db.sqlite3
 db.sqlite3-journal
 
 .infisical/
-shop/tests
 
 # Local tests
 shop/tests.py
@@ -38,4 +37,6 @@ media/
 # OS
 .DS_Store
 Thumbs.db
-docs/
+# Keep local documentation ignored except the shared testing guide.
+docs/*
+!docs/testing.md
