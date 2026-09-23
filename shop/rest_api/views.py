@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiTypes
+
 from django.db.models import Prefetch, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -25,6 +27,8 @@ from ..services.rate_limit import (
 from .permissions import CatalogPermission, OrderPermission, StaffCsvPermission
 from .serializers import (
     AIProductSearchSerializer, AddOrderItemSerializer, CategorySerializer,
+    AuthenticationResponseSerializer, CsvImportSerializer, CsvImportResultSerializer,
+    AIProductSearchResponseSerializer,
     CreateOrderSerializer, LoginSerializer, OrderSerializer, ProductSerializer,
     RefreshTokenSerializer, SignupSerializer, UpdateOrderItemSerializer,
     UpdateOrderStatusSerializer, UserSerializer,
@@ -52,6 +56,7 @@ def _authentication_response(result):
     }
 
 
+@extend_schema_view(post=extend_schema(request=SignupSerializer, responses={201: AuthenticationResponseSerializer}, tags=["Authentication"]))
 class SignupView(APIView):
     permission_classes = [AllowAny]
 
@@ -62,6 +67,7 @@ class SignupView(APIView):
         return Response(_authentication_response(result), status=status.HTTP_201_CREATED)
 
 
+@extend_schema_view(post=extend_schema(request=LoginSerializer, responses=AuthenticationResponseSerializer, tags=["Authentication"]))
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
@@ -72,6 +78,7 @@ class LoginView(APIView):
         return Response(_authentication_response(result))
 
 
+@extend_schema_view(post=extend_schema(request=RefreshTokenSerializer, responses=AuthenticationResponseSerializer, tags=["Authentication"]))
 class RefreshTokenView(APIView):
     permission_classes = [AllowAny]
 
@@ -82,6 +89,7 @@ class RefreshTokenView(APIView):
         return Response(_authentication_response(result))
 
 
+@extend_schema_view(post=extend_schema(request=RefreshTokenSerializer, responses={204: None}, tags=["Authentication"]))
 class LogoutView(APIView):
     permission_classes = [AllowAny]
 
@@ -92,6 +100,7 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@extend_schema_view(get=extend_schema(responses=UserSerializer, tags=["Authentication"]))
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -99,6 +108,11 @@ class MeView(APIView):
         return Response(UserSerializer(request.user).data)
 
 
+@extend_schema_view(
+    list=extend_schema(auth=[{"BearerAuth": []}, {}]),
+    retrieve=extend_schema(auth=[{"BearerAuth": []}, {}]),
+)
+@extend_schema(tags=["Product"])
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.select_related("category").order_by("id")
     serializer_class = ProductSerializer
@@ -114,6 +128,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated(), StaffCsvPermission()]
         return super().get_permissions()
 
+    @extend_schema(request=AIProductSearchSerializer, responses=AIProductSearchResponseSerializer, filters=False)
     @action(detail=False, methods=["post"], url_path="ai-search")
     def ai_search(self, request):
         input_serializer = AIProductSearchSerializer(data=request.data)
@@ -147,6 +162,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @extend_schema(request={"multipart/form-data": CsvImportSerializer}, responses=CsvImportResultSerializer)
     @action(detail=False, methods=["post"], url_path="import")
     def import_csv(self, request):
         uploaded_file = request.FILES.get("file")
@@ -160,6 +176,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             raise ValidationError({"rows": exc.errors}) from exc
         return Response(result)
 
+    @extend_schema(responses={(200, "text/csv"): OpenApiTypes.BINARY}, filters=False)
     @action(detail=False, methods=["get"], url_path="export")
     def export_csv(self, request):
         
@@ -231,7 +248,14 @@ class ProductViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@extend_schema_view(
+    list=extend_schema(auth=[{"BearerAuth": []}, {}]),
+    retrieve=extend_schema(auth=[{"BearerAuth": []}, {}]),
+)
+@extend_schema(tags=["Category"])
 class CategoryViewSet(viewsets.ModelViewSet):
+    pagination_class = None
+    filter_backends = []
     queryset = Category.objects.order_by("id")
     serializer_class = CategorySerializer
     permission_classes = [CatalogPermission]
@@ -283,7 +307,12 @@ class CategoryViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@extend_schema_view(create=extend_schema(request=CreateOrderSerializer, responses={201: OrderSerializer}))
+@extend_schema(tags=["Orders"])
 class OrderViewSet(viewsets.GenericViewSet):
+    pagination_class = None
+    filter_backends = []
+    queryset = Order.objects.none()
     serializer_class = OrderSerializer
     permission_classes = [OrderPermission]
 
@@ -292,6 +321,7 @@ class OrderViewSet(viewsets.GenericViewSet):
             return [IsAuthenticated(), StaffCsvPermission()]
         return super().get_permissions()
 
+    @extend_schema(responses={(200, "text/csv"): OpenApiTypes.BINARY}, filters=False)
     @action(detail=False, methods=["get"], url_path="export")
     def export_csv(self, request):
         response = HttpResponse(
@@ -301,6 +331,8 @@ class OrderViewSet(viewsets.GenericViewSet):
         return response
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Order.objects.none()
         queryset = Order.objects.select_related("user").prefetch_related(
             Prefetch("items", queryset=OrderItem.objects.select_related("product__category"))
         ).order_by("-created_at")
@@ -363,6 +395,7 @@ class OrderViewSet(viewsets.GenericViewSet):
         if order.status not in {"PENDING", "CONFIRMED"}:
             raise PermissionDenied("This order can no longer be cancelled")
 
+    @extend_schema(request=AddOrderItemSerializer, responses=OrderSerializer)
     @action(detail=True, methods=["post"], url_path="items")
     def add_item(self, request, pk=None):
         self.get_object()
@@ -377,6 +410,8 @@ class OrderViewSet(viewsets.GenericViewSet):
         )
         return Response(self.get_serializer(order).data)
 
+    @extend_schema(methods=["PATCH"], request=UpdateOrderItemSerializer, responses=OrderSerializer, parameters=[OpenApiParameter("item_id", int, OpenApiParameter.PATH)])
+    @extend_schema(methods=["DELETE"], request=None, responses={200: OrderSerializer}, parameters=[OpenApiParameter("item_id", int, OpenApiParameter.PATH)])
     @action(detail=True, methods=["patch", "delete"], url_path=r"items/(?P<item_id>[^/.]+)")
     def item(self, request, pk=None, item_id=None):
         order_from_url = self.get_object()
@@ -399,6 +434,7 @@ class OrderViewSet(viewsets.GenericViewSet):
             )
         return Response(self.get_serializer(order).data)
 
+    @extend_schema(request=None, responses=OrderSerializer)
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
         self.get_object()
@@ -409,6 +445,7 @@ class OrderViewSet(viewsets.GenericViewSet):
         )
         return Response(self.get_serializer(order).data)
 
+    @extend_schema(request=UpdateOrderStatusSerializer, responses=OrderSerializer)
     @action(detail=True, methods=["patch"], url_path="status")
     def update_status(self, request, pk=None):
         self.get_object()

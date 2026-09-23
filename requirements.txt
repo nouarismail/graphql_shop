@@ -12,6 +12,7 @@ click-repl==0.3.0
 Django==6.1
 django-filter==26.1
 djangorestframework==3.18.0
+drf-spectacular==0.28.0
 graphene==3.4.3
 graphene-django==3.2.3
 graphql-core==3.2.11
