@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from decimal import Decimal
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 
 from ..models import Category, Order, OrderItem, Product
 from ..services.order_service import ALLOWED_ORDER_STATUSES
@@ -32,6 +33,7 @@ class ProductSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("id", "price_with_tax", "category")
 
+    @extend_schema_field(serializers.FloatField())
     def get_price_with_tax(self, product):
         return product.price * Decimal("1.2")
 
@@ -91,3 +93,33 @@ class RefreshTokenSerializer(serializers.Serializer):
 
 class AIProductSearchSerializer(serializers.Serializer):
     message = serializers.CharField(max_length=1000, trim_whitespace=True)
+
+
+class AuthenticationResponseSerializer(serializers.Serializer):
+    user = UserSerializer()
+    access_token = serializers.CharField()
+    refresh_token = serializers.CharField()
+
+
+class CsvImportSerializer(serializers.Serializer):
+    file = serializers.FileField(help_text="CSV with name, price, category_id; optional id and description.")
+
+
+class CsvImportResultSerializer(serializers.Serializer):
+    created = serializers.IntegerField()
+    updated = serializers.IntegerField()
+    total = serializers.IntegerField()
+
+
+class ProductSearchFiltersSerializer(serializers.Serializer):
+    search = serializers.CharField(allow_null=True)
+    category = serializers.CharField(allow_null=True)
+    min_price = serializers.FloatField(allow_null=True)
+    max_price = serializers.FloatField(allow_null=True)
+    ordering = serializers.ChoiceField(choices=["price", "-price", "name", "-name"], allow_null=True)
+
+
+class AIProductSearchResponseSerializer(serializers.Serializer):
+    filters = ProductSearchFiltersSerializer()
+    count = serializers.IntegerField()
+    products = ProductSerializer(many=True)

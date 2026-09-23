@@ -1,5 +1,6 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from .views import (
     CategoryViewSet, LoginView, LogoutView, MeView, OrderViewSet,
@@ -13,6 +14,8 @@ router.register("categories", CategoryViewSet, basename="category")
 router.register("orders", OrderViewSet, basename="order")
 
 urlpatterns = [
+    path("schema/", SpectacularAPIView.as_view(authentication_classes=[]), name="rest-schema"),
+    path("docs/", SpectacularSwaggerView.as_view(url_name="rest-schema", authentication_classes=[]), name="rest-swagger"),
     path("auth/signup/", SignupView.as_view(), name="rest-signup"),
     path("auth/login/", LoginView.as_view(), name="rest-login"),
     path("auth/refresh/", RefreshTokenView.as_view(), name="rest-refresh"),

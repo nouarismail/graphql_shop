@@ -1345,6 +1345,28 @@ mutation UpdateOrderStatus($id: ID!, $status: OrderStatusEnum!) {
 \`\`\`
 
 ## REST API
+### Swagger documentation
+
+Open [Swagger UI](http://localhost:8000/api/docs/) to browse and try the REST
+endpoints. The OpenAPI schema is available at `/api/schema/` (or
+`/api/schema/?format=json` for JSON). Documentation is publicly accessible;
+API requests still enforce their existing permissions.
+
+To try authenticated requests, call `/api/auth/login/`, copy `access_token`,
+click **Authorize**, and paste the token without the `Bearer` prefix. CSV import
+accepts a file upload, and export endpoints return CSV downloads. GraphQL keeps
+its separate GraphiQL interface at `/graphql/`.
+
+Install the updated dependencies with `pip install -r requirements.txt` and
+restart the server, or rebuild with `docker compose up -d --build`. Swagger UI
+loads its JavaScript and CSS from a CDN, so the browser needs internet access.
+
+Validate the generated schema locally:
+
+```bash
+python manage.py spectacular --settings=config.test_settings --validate --fail-on-warn --file /tmp/shop-openapi.yaml
+```
+
 The REST API is available under \`/api/\` and uses the same services, permissions,
 
 JWT tokens, Redis revocation state, and catalog cache as GraphQL. REST resources

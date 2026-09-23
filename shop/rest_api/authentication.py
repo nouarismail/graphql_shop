@@ -1,5 +1,6 @@
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.exceptions import AuthenticationFailed
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 
 from ..graphql.jwt import get_user_from_token
 from ..services.token_store import TokenStoreUnavailable
@@ -32,3 +33,11 @@ class JWTAuthentication(BaseAuthentication):
 
     def authenticate_header(self, request):
         return "Bearer"
+
+
+class JWTAuthenticationScheme(OpenApiAuthenticationExtension):
+    target_class = "shop.rest_api.authentication.JWTAuthentication"
+    name = "BearerAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
