@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 import os
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -258,9 +258,38 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
+MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME", "product-images")
+MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL", "http://localhost:9000").rstrip("/")
+_minio_public = urlsplit(MINIO_PUBLIC_URL)
+if (
+    _minio_public.scheme not in {"http", "https"}
+    or not _minio_public.netloc
+    or _minio_public.path
+    or _minio_public.query
+    or _minio_public.fragment
+    or _minio_public.username
+    or _minio_public.password
+):
+    raise ValueError("MINIO_PUBLIC_URL must be an http(s) origin without a path or query")
+PRODUCT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "access_key": env_or_secret("MINIO_ACCESS_KEY", "minioadmin"),
+            "secret_key": env_or_secret("MINIO_SECRET_KEY", "minioadmin"),
+            "bucket_name": MINIO_BUCKET_NAME,
+            "endpoint_url": os.getenv("MINIO_ENDPOINT_URL", "http://localhost:9000"),
+            "region_name": "us-east-1",
+            "signature_version": "s3v4",
+            "addressing_style": "path",
+            "default_acl": None,
+            "querystring_auth": False,
+            "file_overwrite": False,
+            "custom_domain": f"{_minio_public.netloc}/{MINIO_BUCKET_NAME}",
+            "url_protocol": f"{_minio_public.scheme}:",
+        },
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",

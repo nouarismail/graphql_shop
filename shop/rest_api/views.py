@@ -235,6 +235,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                 description=values.get("description", existing.description),
                 price=values.get("price", existing.price),
                 category_id=values.get("category_id", existing.category_id),
+                **({"image": values["image"]} if "image" in values else {}),
             ),
         )
         return Response(self.get_serializer(product).data)

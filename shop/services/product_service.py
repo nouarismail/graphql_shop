@@ -11,9 +11,10 @@ def create_product(input):
 
     product = Product.objects.create(
         name=input.name,
-        description=input.description,
+        description=getattr(input, "description", None),
         price=input.price,
         category=category,
+        image=getattr(input, "image", None) or "",
     )
 
     return product
@@ -37,6 +38,8 @@ def update_product(global_id, input):
     product.description = input.description
     product.price = input.price
     product.category = category
+    if hasattr(input, "image"):
+        product.image = input.image or ""
 
     product.save()
 

@@ -5,6 +5,11 @@ x-app-environment: &app-environment
   DB_NAME: ${DB_NAME:-shop_db}
   DB_USER: ${DB_USER:-shop_user}
   DB_PASSWORD_FILE: /run/secrets/db_password
+  MINIO_ENDPOINT_URL: http://minio:9000
+  MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://localhost:9000}
+  MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-product-images}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
   DB_HOST: db
   DB_PORT: "5432"
   REDIS_URL: redis://redis:6379/0
@@ -25,6 +30,8 @@ x-app-environment: &app-environment
   OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
 
 x-app-depends-on: &app-depends-on
+  minio-init:
+    condition: service_completed_successfully
   db:
     condition: service_healthy
   redis:
@@ -38,6 +45,36 @@ x-app-secrets: &app-secrets
   - rabbitmq_password
 
 services:
+  minio:
+    image: graphql-shop-minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+
+  minio-init:
+    image: graphql-shop-mc:RELEASE.2025-04-16T18-13-26Z
+    restart: on-failure
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-product-images}
+    depends_on:
+      - minio
+    entrypoint: /bin/sh
+    command:
+      - -ec
+      - |
+        until mc alias set local http://minio:9000 "$${MINIO_ACCESS_KEY}" "$${MINIO_SECRET_KEY}"; do sleep 2; done
+        mc mb --ignore-existing "local/$${MINIO_BUCKET_NAME}"
+        mc anonymous set download "local/$${MINIO_BUCKET_NAME}/products/"
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -261,6 +298,7 @@ networks:
   monitoring:
 
 volumes:
+  minio-data:
   prometheus-data:
   grafana-data:
   postgres-data:

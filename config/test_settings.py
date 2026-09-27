@@ -18,3 +18,7 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
     }
 }
+
+# Upload tests must never contact real object storage.
+STORAGES = {**STORAGES, "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"}}
+MEDIA_URL = "/test-media/"

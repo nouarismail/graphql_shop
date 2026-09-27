@@ -1,8 +1,13 @@
-from django.db import models, router, transaction
-
-# Create your models here.
+from pathlib import Path
+from uuid import uuid4
 
 from django.contrib.auth.models import User
+from django.db import models, router, transaction
+
+
+def product_image_path(instance, filename):
+    return f"products/{uuid4().hex}{Path(filename).suffix.lower()}"
+
 
 class AuditedModel(models.Model):
     """Keep each ordinary model save and its audit event in one transaction."""
@@ -56,6 +61,7 @@ class Category(AuditedModel):
 class Product(AuditedModel):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to=product_image_path, blank=True, max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products')
 

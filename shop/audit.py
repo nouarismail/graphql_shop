@@ -2,12 +2,13 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 from decimal import Decimal
+from django.db.models.fields.files import FieldFile
 from uuid import uuid4
 
 _context = ContextVar("audit_context", default=None)
 FIELDS = {
     "shop.category": ("name",),
-    "shop.product": ("name", "price", "category_id"),
+    "shop.product": ("name", "price", "category_id", "image"),
     "shop.order": ("user_id", "status"),
     "shop.orderitem": ("order_id", "product_id", "quantity"),
 }
@@ -30,7 +31,7 @@ def set_audit_actor(user):
 
 
 def snapshot(instance):
-    return {field: str(value) if isinstance(value, Decimal) else value
+    return {field: str(value) if isinstance(value, (Decimal, FieldFile)) else value
             for field in FIELDS[instance._meta.label_lower]
             for value in [getattr(instance, field)]}
 
