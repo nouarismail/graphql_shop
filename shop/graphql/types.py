@@ -19,6 +19,7 @@ class CategoryType(DjangoObjectType):
 
 
 class ProductType(DjangoObjectType):
+    image = graphene.String(description="Public image URL, or null when no image is attached.")
     price_with_tax = graphene.Decimal()
     price = graphene.Decimal()
     
@@ -28,6 +29,9 @@ class ProductType(DjangoObjectType):
         
         interfaces = (graphene.relay.Node,)
         
+    def resolve_image(self, info):
+        return self.image.url if self.image else None
+
     def resolve_price_with_tax(self, info):
         return self.price * Decimal("1.2") 
     

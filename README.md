@@ -1560,3 +1560,7 @@ For a complete run, execute folders in this order:
 4\. \`Cleanup\` (optional; deletes the created product and logs out)
 
 The staff account must belong to the \`Staff\` group created by \`setup\_roles\`.
+
+## Product images
+
+Products support optional images stored and served by MinIO. See [the complete image guide](PRODUCT_IMAGES.md) for every implementation change, environment settings, Docker startup, upload examples, GraphQL queries, and storage lifecycle details.

@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.conf import settings
 from decimal import Decimal
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
@@ -21,6 +22,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(required=False, allow_null=True)
     category_id = serializers.IntegerField(write_only=True)
     category = CategorySerializer(read_only=True)
     price_with_tax = serializers.SerializerMethodField()
@@ -29,9 +31,18 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = (
             "id", "name", "description", "price", "price_with_tax",
-            "category_id", "category",
+            "category_id", "category", "image",
         )
         read_only_fields = ("id", "price_with_tax", "category")
+
+    def validate_image(self, image):
+        if image is None:
+            return None
+        if image.size > settings.PRODUCT_IMAGE_MAX_BYTES:
+            raise serializers.ValidationError("Images must be 5 MiB or smaller.")
+        if image.image.format not in {"JPEG", "PNG", "WEBP"}:
+            raise serializers.ValidationError("Use a JPEG, PNG, or WebP image.")
+        return image
 
     @extend_schema_field(serializers.FloatField())
     def get_price_with_tax(self, product):
