@@ -37,6 +37,7 @@ media/
 # OS
 .DS_Store
 Thumbs.db
-# Keep local documentation ignored except the shared testing guide.
+# Keep local documentation ignored except shared guides.
 docs/*
 !docs/testing.md
+!docs/tracing.md
