@@ -1564,3 +1564,8 @@ The staff account must belong to the \`Staff\` group created by \`setup\_roles\`
 ## Product images
 
 Products support optional images stored and served by MinIO. See [the complete image guide](PRODUCT_IMAGES.md) for every implementation change, environment settings, Docker startup, upload examples, GraphQL queries, and storage lifecycle details.
+
+## Request tracing
+
+Optional OpenTelemetry tracing connects REST/GraphQL requests, database/cache calls,
+Ollama HTTP calls and Celery tasks in Grafana Tempo. See [tracing setup](docs/tracing.md).

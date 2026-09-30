@@ -1,4 +1,10 @@
 x-app-environment: &app-environment
+  OTEL_ENABLED: ${OTEL_ENABLED:-false}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_EXPORTER_OTLP_TIMEOUT: "5"
+  OTEL_TRACES_SAMPLER: parentbased_traceidratio
+  OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+  OTEL_BSP_MAX_QUEUE_SIZE: "2048"
   DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
   DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
   DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
@@ -214,6 +220,27 @@ services:
     secrets: *app-secrets
     depends_on: *app-depends-on
 
+  otel-collector:
+    image: otel/opentelemetry-collector:0.139.0
+    profiles: [monitoring]
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./docker/monitoring/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    networks: [default, monitoring]
+    depends_on:
+      - tempo
+
+  tempo:
+    image: grafana/tempo:2.9.0
+    profiles: [monitoring]
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./docker/monitoring/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    networks: [monitoring]
+
   prometheus:
     image: prom/prometheus:v3.13.3
     profiles: [monitoring]
@@ -299,6 +326,7 @@ networks:
 
 volumes:
   minio-data:
+  tempo-data:
   prometheus-data:
   grafana-data:
   postgres-data:

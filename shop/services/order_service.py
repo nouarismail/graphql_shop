@@ -1,5 +1,7 @@
 from django.db import transaction
 
+from config.telemetry import span
+
 from ..models import Order, OrderItem, Product
 from ..tasks import send_order_confirmation_email
 from .id_service import decode_global_id
@@ -36,6 +38,7 @@ def _get_product(global_id):
 
 
 @transaction.atomic
+@span("order.create")
 def create_order(user, items):
     if not items:
         raise Exception("Order must contain at least one item")

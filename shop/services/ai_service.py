@@ -2,6 +2,8 @@ from ollama import chat
 from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
+from config.telemetry import span
+
 from ..models import Category
 
 
@@ -70,6 +72,7 @@ User: Show me Electronics products
 Output: {{"search":null,"category":"Electronics","min_price":null,"max_price":null,"ordering":null}}
 """
 
+@span("ai.extract_product_filters")
 def extract_product_filters(message: str) -> ProductSearchFilters:
     categories = list(
         Category.objects
